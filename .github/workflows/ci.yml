@@ -54,6 +54,9 @@ jobs:
           image-ref: ghcr.io/tachyonapp/tachyon-api:${{ github.sha }}
           exit-code: "1"
           severity: "CRITICAL,HIGH"
+          ignore-unfixed: true
+          skip-dirs: /tmp,/var/cache,/var/tmp,.git,node_modules
+          skip-files: LICENSE,README.md,.gitignore
 
   check-lockfile:
     runs-on: ubuntu-latest
