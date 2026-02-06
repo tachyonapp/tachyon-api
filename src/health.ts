@@ -22,7 +22,7 @@ function getPgPool(): Pool {
   return pgPool;
 }
 
-function getRedisClient(): Redis {
+export function getRedisClient(): Redis {
   if (!redisClient) {
     redisClient = new Redis({
       host: process.env.REDIS_HOST || "localhost",
