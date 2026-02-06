@@ -1,4 +1,4 @@
-import { checkPostgres, checkRedis } from "./health";
+import { checkPostgres, checkRedis, getRedisClient } from "./health";
 
 describe("health checks", () => {
   describe("checkPostgres", () => {
@@ -16,4 +16,9 @@ describe("health checks", () => {
       expect(result).toBe(false);
     });
   });
+});
+
+afterAll(async () => {
+  const client = await getRedisClient();
+  await client.quit();
 });
