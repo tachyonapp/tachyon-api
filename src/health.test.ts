@@ -1,4 +1,4 @@
-import { checkPostgres, checkRedis, getRedisClient } from "./health";
+import { checkPostgres, checkValkey, getValkeyClient } from "./health";
 
 describe("health checks", () => {
   describe("checkPostgres", () => {
@@ -9,16 +9,16 @@ describe("health checks", () => {
     });
   });
 
-  describe("checkRedis", () => {
-    it("returns false when Redis is not available", async () => {
-      // With no Redis running, the check should return false (not throw)
-      const result = await checkRedis();
+  describe("checkValkey", () => {
+    it("returns false when ValKey is not available", async () => {
+      // With no ValKey running, the check should return false (not throw)
+      const result = await checkValkey();
       expect(result).toBe(false);
     });
   });
 });
 
 afterAll(async () => {
-  const client = await getRedisClient();
+  const client = await getValkeyClient();
   await client.quit();
 });
