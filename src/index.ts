@@ -18,6 +18,7 @@ app.get("/health", async (_req, res) => {
     if (pgOk && valkeyOk) {
       res.status(200).json({
         status: "healthy",
+        service: "tachyon-api",
         version: process.env.GIT_COMMIT_SHA || "unknown",
         timestamp: new Date().toISOString(),
         checks: { postgres: "connected", valkey: "connected" },
