@@ -22,7 +22,7 @@ function getPgPool(): Pool {
   return pgPool;
 }
 
-export function getValkeyClient(): Redis {
+export async function getValkeyClient(): Promise<Redis> {
   if (!valkeyClient) {
     valkeyClient = new Redis({
       host: process.env.VALKEY_HOST || "localhost",
@@ -47,7 +47,7 @@ export async function checkPostgres(): Promise<boolean> {
 
 export async function checkValkey(): Promise<boolean> {
   try {
-    const client = getValkeyClient();
+    const client = await getValkeyClient();
     if (client.status !== "ready") {
       await client.connect();
     }
