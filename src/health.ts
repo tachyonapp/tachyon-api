@@ -7,11 +7,7 @@ let valkeyClient: Redis | null = null; // ValKey is a direct fork of redis - ior
 function getPgPool(): Pool {
   if (!pgPool) {
     pgPool = new Pool({
-      host: process.env.POSTGRES_HOST || "localhost",
-      port: parseInt(process.env.POSTGRES_PORT || "5432", 10),
-      database: process.env.POSTGRES_DB || "tachyon_dev",
-      user: process.env.POSTGRES_USER || "tachyon",
-      password: process.env.POSTGRES_PASSWORD || "tachyon_local_dev",
+      connectionString: process.env.DATABASE_URL,
       ssl:
         process.env.POSTGRES_SSL === "true"
           ? { rejectUnauthorized: false }
