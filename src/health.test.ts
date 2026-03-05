@@ -1,9 +1,25 @@
-import { checkPostgres, checkValkey, getValkeyClient } from "./health";
+import { checkPostgres, checkValkey } from "./health";
+
+jest.mock("pg", () => {
+  return {
+    Pool: jest.fn().mockImplementation(() => ({
+      query: jest.fn().mockRejectedValue(new Error("Connection refused")),
+    })),
+  };
+});
+
+jest.mock("ioredis", () => {
+  return jest.fn().mockImplementation(() => ({
+    status: "wait",
+    connect: jest.fn().mockRejectedValue(new Error("Connection refused")),
+    ping: jest.fn().mockRejectedValue(new Error("Connection refused")),
+    quit: jest.fn().mockResolvedValue("OK"),
+  }));
+});
 
 describe("health checks", () => {
   describe("checkPostgres", () => {
     it("returns false when PostgreSQL is not available", async () => {
-      // With no PostgreSQL running, the check should return false (not throw)
       const result = await checkPostgres();
       expect(result).toBe(false);
     });
@@ -11,14 +27,8 @@ describe("health checks", () => {
 
   describe("checkValkey", () => {
     it("returns false when ValKey is not available", async () => {
-      // With no ValKey running, the check should return false (not throw)
       const result = await checkValkey();
       expect(result).toBe(false);
     });
   });
-});
-
-afterAll(async () => {
-  const client = await getValkeyClient();
-  await client.quit();
 });
