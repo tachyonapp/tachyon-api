@@ -1,4 +1,4 @@
-import { checkPostgres, checkValkey } from "./health";
+import { checkPostgres, checkValkey } from "../health";
 
 jest.mock("pg", () => {
   return {
