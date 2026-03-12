@@ -1,5 +1,6 @@
 import express from "express";
 import { checkPostgres, checkValkey } from "./health";
+import { mountDashboard } from "./bullboard";
 
 const app = express();
 const PORT = parseInt(process.env.PORT || "4000", 10);
@@ -60,6 +61,8 @@ app.get("/ready", async (_req, res) => {
     res.status(503).json({ status: "not ready" });
   }
 });
+
+mountDashboard(app);
 
 app.listen(PORT, () => {
   console.log(`tachyon-api listening on port ${PORT}`);
