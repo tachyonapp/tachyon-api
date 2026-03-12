@@ -63,8 +63,8 @@ Six named Queue instances are available for use by GraphQL resolvers (Feature 4+
 
 | Queue | Description |
 |---|---|
-| `scan:dispatch` | Triggers a market scan fan-out across all active bots |
-| `scan:bot` | Per-bot scan job (enqueued by `tachyon-workers` scan dispatch) |
+| `scan-dispatch` | Triggers a market scan fan-out across all active bots |
+| `scan-bot` | Per-bot scan job (enqueued by `tachyon-workers` scan dispatch) |
 | `expiry` | Proposal expiry sweep |
 | `reconciliation` | Broker reconciliation pass |
 | `notification` | On-demand push notification delivery |
