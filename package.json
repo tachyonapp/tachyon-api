@@ -11,16 +11,17 @@
         "lint": "eslint src/"
     },
     "dependencies": {
+        "@bull-board/api": "^6.20.5",
+        "@bull-board/express": "^6.20.5",
         "@tachyonapp/tachyon-db": "^0.1.0",
         "@tachyonapp/tachyon-queue-types": "^1.0.1",
+        "basic-auth-connect": "^1.1.0",
         "bullmq": "^5.71.0",
         "express": "^4.21.0",
         "ioredis": "^5.10.0",
         "pg": "^8.13.0"
     },
     "devDependencies": {
-        "@bull-board/api": "^6.20.5",
-        "@bull-board/express": "^6.20.5",
         "@eslint/js": "^9.39.2",
         "@types/express": "^5.0.0",
         "@types/jest": "^29.5.0",
@@ -28,7 +29,6 @@
         "@types/pg": "^8.11.0",
         "@typescript-eslint/eslint-plugin": "^8.0.0",
         "@typescript-eslint/parser": "^8.0.0",
-        "basic-auth-connect": "^1.1.0",
         "eslint": "^9.39.2",
         "globals": "^17.3.0",
         "jest": "^29.7.0",

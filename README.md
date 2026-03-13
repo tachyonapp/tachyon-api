@@ -82,7 +82,7 @@ BullMQ job queue monitoring dashboard mounted at `/internal/bull-board`.
 | Staging | `https://staging-api.tachyon.app/internal/bull-board` | Basic auth (`BULL_BOARD_USERNAME` / `BULL_BOARD_PASSWORD`) |
 | Production | Not mounted | N/A |
 
-The dashboard is excluded from production via a `NODE_ENV === 'production'` guard in `src/bullboard.ts`. The `@bull-board/*` packages are `devDependencies` and are additionally excluded from the production Docker image by the multi-stage build (`npm ci --omit=dev`).
+The dashboard is excluded from production via a `NODE_ENV === 'production'` guard in `src/bullboard.ts`. The `@bull-board/*` and `basic-auth-connect` packages are production `dependencies` — TypeScript static imports compile to `require()` calls that execute at module load time, before any runtime guard can fire. The packages are present in the production image but the `NODE_ENV` guard ensures the dashboard is never mounted.
 
 ## Environment Variables
 
