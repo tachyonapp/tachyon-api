@@ -52,3 +52,13 @@ export const TradeTempoEnum = builder.enumType("TradeTempo", {
 export const CombatPatienceEnum = builder.enumType("CombatPatience", {
   values: ["PATIENT", "CALCULATED", "STRATEGIC", "IMPULSIVE"] as const,
 });
+
+// Mirrors DB enum: proposal_side
+export const ProposalSideEnum = builder.enumType("ProposalSide", {
+  values: ["BUY", "SELL"] as const,
+});
+
+// Mirrors DB enum: order_entry_type
+export const OrderEntryTypeEnum = builder.enumType("OrderEntryType", {
+  values: ["MARKET", "LIMIT"] as const,
+});

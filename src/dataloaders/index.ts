@@ -23,6 +23,7 @@ import type {
   DB,
   UsersRow,
   BotsRow,
+  BotSettingsRow,
   ProposalsRow,
   PositionsRow,
 } from "@tachyonapp/tachyon-db";
@@ -30,6 +31,8 @@ import type {
 export interface DataLoaders {
   userById: DataLoader<string, UsersRow | null>;
   botById: DataLoader<string, BotsRow | null>;
+  botSettingsById: DataLoader<string, BotSettingsRow | null>;
+  botFrameById: DataLoader<string, { id: string; name: string } | null>;
   proposalsByBotId: DataLoader<string, ProposalsRow[]>;
   positionByBotId: DataLoader<string, PositionsRow | null>;
 }
@@ -58,9 +61,41 @@ export function createDataLoaders(db: Kysely<DB>): DataLoaders {
         .selectFrom("bots")
         .selectAll()
         .where("id", "in", ids as string[])
-        .where("status", "!=", "ARCHIVED") // ARCHIVED is the soft-delete state (no DELETED in schema)
+        .where("status", "!=", "ARCHIVED")
         .execute();
       const map = new Map(bots.map((b) => [String(b.id), b]));
+      return ids.map((id) => map.get(id) ?? null);
+    }),
+
+    // Key: bot_settings.id (i.e. bots.current_settings_id)
+    // Used by Bot field resolvers for dailyMaxLoss, dailyMaxGain, riskAttitude, etc.
+    // DataLoader deduplicates — multiple settings fields on the same bot fire one query.
+    botSettingsById: new DataLoader<string, BotSettingsRow | null>(
+      async (ids) => {
+        const settings = await db
+          .selectFrom("bot_settings")
+          .selectAll()
+          .where("id", "in", ids as string[])
+          .execute();
+        const map = new Map(settings.map((s) => [String(s.id), s]));
+        return ids.map((id) => map.get(id) ?? null);
+      },
+    ),
+
+    // Key: bot_frames.id (i.e. bots.frame_id)
+    // Only name is needed by the frame field resolver — select minimally.
+    botFrameById: new DataLoader<
+      string,
+      { id: string; name: string } | null
+    >(async (ids) => {
+      const frames = await db
+        .selectFrom("bot_frames")
+        .select(["id", "name"])
+        .where("id", "in", ids as string[])
+        .execute();
+      const map = new Map(
+        frames.map((f) => [String(f.id), { id: String(f.id), name: f.name }]),
+      );
       return ids.map((id) => map.get(id) ?? null);
     }),
 

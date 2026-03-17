@@ -15,59 +15,88 @@ builder.objectType("Bot", {
     id: t.exposeID("id"),
     name: t.exposeString("name"),
 
-    // frame_name is joined from bot_frames — always present.
-    // Cast from string to BotFrameName: the JOIN guarantees the value is one
-    // of the seeded bot_frames.name values; the type cannot be narrower at the
-    // DB layer because bot_frames is a lookup table, not a PostgreSQL enum.
+    // frame_name lives in the bot_frames lookup table — resolved via DataLoader.
+    // FK constraint guarantees the frame always exists; throw on missing data.
     frame: t.field({
       type: BotFrameEnum,
-      resolve: (bot) => bot.frame_name as BotFrameName,
+      resolve: async (bot, _args, ctx) => {
+        const frame = await ctx.loaders.botFrameById.load(String(bot.frame_id));
+        if (!frame) throw new Error(`Bot frame ${bot.frame_id} not found`);
+        return frame.name as BotFrameName;
+      },
     }),
 
-    // bot.status is already BotStatus ("ACTIVE" | "ARCHIVED" | "DRAFT" | "PAUSED")
-    // which matches the enum values exactly — no cast needed
     status: t.field({
       type: BotStatusEnum,
       resolve: (bot) => bot.status,
     }),
 
-    // allocation_pct is the actual column name on the bots table
+    // allocation_pct is on the bots table directly
     allocationPct: t.field({
       type: "Decimal",
       resolve: (bot) => bot.allocation_pct.toString(),
     }),
 
-    // Settings fields — nullable until bot_settings row exists (DRAFT bots)
+    // Settings fields live in bot_settings, resolved via DataLoader.
+    // current_settings_id is null for DRAFT bots with no settings yet — all nullable.
     dailyMaxLoss: t.field({
       type: "Decimal",
       nullable: true,
-      resolve: (bot) => bot.daily_max_loss ?? null,
+      resolve: async (bot, _args, ctx) => {
+        if (!bot.current_settings_id) return null;
+        const s = await ctx.loaders.botSettingsById.load(
+          String(bot.current_settings_id),
+        );
+        return s?.daily_max_loss ?? null;
+      },
     }),
 
     dailyMaxGain: t.field({
       type: "Decimal",
       nullable: true,
-      resolve: (bot) => bot.daily_max_gain ?? null,
+      resolve: async (bot, _args, ctx) => {
+        if (!bot.current_settings_id) return null;
+        const s = await ctx.loaders.botSettingsById.load(
+          String(bot.current_settings_id),
+        );
+        return s?.daily_max_gain ?? null;
+      },
     }),
 
-    // risk_attitude, trade_tempo, combat_patience are already typed as the
-    // correct string literal unions (or null) in BotWithSettings — no cast needed
     riskAttitude: t.field({
       type: RiskAttitudeEnum,
       nullable: true,
-      resolve: (bot) => bot.risk_attitude ?? null,
+      resolve: async (bot, _args, ctx) => {
+        if (!bot.current_settings_id) return null;
+        const s = await ctx.loaders.botSettingsById.load(
+          String(bot.current_settings_id),
+        );
+        return s?.risk_attitude ?? null;
+      },
     }),
 
     tradeTempo: t.field({
       type: TradeTempoEnum,
       nullable: true,
-      resolve: (bot) => bot.trade_tempo ?? null,
+      resolve: async (bot, _args, ctx) => {
+        if (!bot.current_settings_id) return null;
+        const s = await ctx.loaders.botSettingsById.load(
+          String(bot.current_settings_id),
+        );
+        return s?.trade_tempo ?? null;
+      },
     }),
 
     combatPatience: t.field({
       type: CombatPatienceEnum,
       nullable: true,
-      resolve: (bot) => bot.combat_patience ?? null,
+      resolve: async (bot, _args, ctx) => {
+        if (!bot.current_settings_id) return null;
+        const s = await ctx.loaders.botSettingsById.load(
+          String(bot.current_settings_id),
+        );
+        return s?.combat_patience ?? null;
+      },
     }),
 
     // Relational fields resolved via DataLoaders (batched — no N+1)

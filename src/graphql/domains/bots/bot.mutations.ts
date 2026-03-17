@@ -1,4 +1,4 @@
-import { builder, type BotWithSettings } from "../../builder";
+import { builder } from "../../builder";
 import {
   BotFrameEnum,
   RiskAttitudeEnum,
@@ -11,9 +11,8 @@ import { scanBotQueue, reconciliationQueue } from "../../../queues";
 import { QUEUE_NAMES } from "@tachyonapp/tachyon-queue-types";
 import type {
   ScanBotJobPayload,
-  ReconciliationJobPayload,
+  PositionClosePayload,
 } from "@tachyonapp/tachyon-queue-types";
-import { botWithSettingsQuery } from "./bot.queries";
 
 // ---------------------------------------------------------------------------
 // Input types
@@ -46,28 +45,29 @@ const UpdateBotInput = builder.inputType("UpdateBotInput", {
 
 // ---------------------------------------------------------------------------
 // Result union types
+// Bot is backed by BotsRow — discriminate on `frame_id` (always present on a bot row)
 // ---------------------------------------------------------------------------
 
 const CreateBotResult = builder.unionType("CreateBotResult", {
   types: ["Bot", ValidationError],
-  resolveType: (value) => ("field" in value ? ValidationError : "Bot"),
+  resolveType: (value) => ("frame_id" in value ? "Bot" : ValidationError),
 });
 
 const UpdateBotResult = builder.unionType("UpdateBotResult", {
   types: ["Bot", ValidationError, NotFoundError],
   resolveType: (value) => {
+    if ("frame_id" in value) return "Bot";
     if ("field" in value) return ValidationError;
-    if ("message" in value && !("frame_name" in value)) return NotFoundError;
-    return "Bot";
+    return NotFoundError;
   },
 });
 
 const BotResult = builder.unionType("BotResult", {
   types: ["Bot", ValidationError, NotFoundError],
   resolveType: (value) => {
+    if ("frame_id" in value) return "Bot";
     if ("field" in value) return ValidationError;
-    if ("message" in value && !("frame_name" in value)) return NotFoundError;
-    return "Bot";
+    return NotFoundError;
   },
 });
 
@@ -116,7 +116,7 @@ builder.mutationField("createBot", (t) =>
       }
 
       // Fetch default exit_personality and stop_style
-      // TODO(Phase-2 — Bot Builder): Allow user to select personality and stop style
+      // TODO:: (Phase-2 — Bot Builder): Allow user to select personality and stop style
       const [exitPersonality, stopStyle] = await Promise.all([
         ctx.db
           .selectFrom("exit_personalities")
@@ -135,7 +135,7 @@ builder.mutationField("createBot", (t) =>
       // Transaction: bots → bot_settings → update current_settings_id
       // Circular FK requires inserting bots first (current_settings_id = null),
       // then bot_settings, then updating bots.current_settings_id.
-      const bot = await ctx.db.transaction().execute(async (trx) => {
+      const botId = await ctx.db.transaction().execute(async (trx) => {
         const newBot = await trx
           .insertInto("bots")
           .values({
@@ -145,7 +145,7 @@ builder.mutationField("createBot", (t) =>
             allocation_pct: input.allocationPct,
             status: "DRAFT",
           })
-          .returningAll()
+          .returning("id")
           .executeTakeFirstOrThrow();
 
         const newSettings = await trx
@@ -172,11 +172,12 @@ builder.mutationField("createBot", (t) =>
         return newBot.id;
       });
 
-      const result = await botWithSettingsQuery(ctx.db)
-        .where("bots.id", "=", bot)
+      // Re-fetch after transaction to get final state (current_settings_id set)
+      return ctx.db
+        .selectFrom("bots")
+        .selectAll()
+        .where("id", "=", botId)
         .executeTakeFirstOrThrow();
-
-      return result as unknown as BotWithSettings;
     },
   }),
 );
@@ -257,8 +258,7 @@ builder.mutationField("updateBot", (t) =>
                 input.combatPatience ??
                 currentSettings?.combat_patience ??
                 "PATIENT",
-              exit_personality_id:
-                currentSettings?.exit_personality_id ?? "1",
+              exit_personality_id: currentSettings?.exit_personality_id ?? "1",
               stop_style_id: currentSettings?.stop_style_id ?? "1",
             })
             .returning("id")
@@ -283,11 +283,12 @@ builder.mutationField("updateBot", (t) =>
         }
       });
 
-      const updated = await botWithSettingsQuery(ctx.db)
-        .where("bots.id", "=", args.id)
+      // Re-fetch after transaction to get final state
+      return ctx.db
+        .selectFrom("bots")
+        .selectAll()
+        .where("id", "=", args.id)
         .executeTakeFirstOrThrow();
-
-      return updated as unknown as BotWithSettings;
     },
   }),
 );
@@ -302,9 +303,11 @@ builder.mutationField("activateBot", (t) =>
     args: { id: t.arg.id({ required: true }) },
     authScopes: { authenticated: true },
     resolve: async (_root, args, ctx) => {
-      const bot = await botWithSettingsQuery(ctx.db)
-        .where("bots.id", "=", args.id)
-        .where("bots.status", "!=", "ARCHIVED")
+      const bot = await ctx.db
+        .selectFrom("bots")
+        .selectAll()
+        .where("id", "=", args.id)
+        .where("status", "!=", "ARCHIVED")
         .executeTakeFirst();
 
       if (!bot) {
@@ -314,7 +317,7 @@ builder.mutationField("activateBot", (t) =>
       assertOwnership(ctx, String(bot.user_id));
 
       // Bots must have settings configured before they can be activated
-      if (!bot.daily_max_loss || !bot.daily_max_gain) {
+      if (!bot.current_settings_id) {
         return {
           message: "Bot must have settings configured before activation",
           field: "status",
@@ -322,11 +325,12 @@ builder.mutationField("activateBot", (t) =>
         };
       }
 
-      await ctx.db
+      const updated = await ctx.db
         .updateTable("bots")
         .set({ status: "ACTIVE" })
         .where("id", "=", args.id)
-        .execute();
+        .returningAll()
+        .executeTakeFirstOrThrow();
 
       // Dispatch an immediate scan so the bot doesn't wait for the next cron tick
       const payload: ScanBotJobPayload = {
@@ -339,11 +343,7 @@ builder.mutationField("activateBot", (t) =>
         backoff: { type: "exponential", delay: 2000 },
       });
 
-      const updated = await botWithSettingsQuery(ctx.db)
-        .where("bots.id", "=", args.id)
-        .executeTakeFirstOrThrow();
-
-      return updated as unknown as BotWithSettings;
+      return updated;
     },
   }),
 );
@@ -371,17 +371,12 @@ builder.mutationField("pauseBot", (t) =>
 
       assertOwnership(ctx, String(existing.user_id));
 
-      await ctx.db
+      return ctx.db
         .updateTable("bots")
         .set({ status: "PAUSED" })
         .where("id", "=", args.id)
-        .execute();
-
-      const updated = await botWithSettingsQuery(ctx.db)
-        .where("bots.id", "=", args.id)
+        .returningAll()
         .executeTakeFirstOrThrow();
-
-      return updated as unknown as BotWithSettings;
     },
   }),
 );
@@ -409,13 +404,14 @@ builder.mutationField("deleteBot", (t) =>
 
       assertOwnership(ctx, String(existing.user_id));
 
-      await ctx.db
+      const updated = await ctx.db
         .updateTable("bots")
         .set({ status: "ARCHIVED" })
         .where("id", "=", args.id)
-        .execute();
+        .returningAll()
+        .executeTakeFirstOrThrow();
 
-      // If bot has an open position, trigger a reconciliation pass to close it
+      // If bot has an open position, dispatch a targeted close job
       const openPosition = await ctx.db
         .selectFrom("positions")
         .select("id")
@@ -424,10 +420,12 @@ builder.mutationField("deleteBot", (t) =>
         .executeTakeFirst();
 
       if (openPosition) {
-        const payload: ReconciliationJobPayload = {
-          triggeredAt: new Date().toISOString(),
-          scope: "partial",
+        const payload: PositionClosePayload = {
+          positionId: String(openPosition.id),
+          botId: String(existing.id),
           userId: ctx.auth!.userId,
+          correlationId: ctx.correlationId,
+          enqueuedAt: new Date().toISOString(),
         };
 
         await reconciliationQueue.add(QUEUE_NAMES.RECONCILIATION, payload, {
@@ -436,11 +434,7 @@ builder.mutationField("deleteBot", (t) =>
         });
       }
 
-      const updated = await botWithSettingsQuery(ctx.db)
-        .where("bots.id", "=", args.id)
-        .executeTakeFirstOrThrow();
-
-      return updated as unknown as BotWithSettings;
+      return updated;
     },
   }),
 );
