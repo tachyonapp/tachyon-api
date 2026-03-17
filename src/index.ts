@@ -1,6 +1,6 @@
 import express from "express";
 import { checkPostgres, checkValkey } from "./health";
-import { mountDashboard } from "./bullboard";
+import { mountDashboard } from "./bullboard/bullboard";
 
 const app = express();
 const PORT = parseInt(process.env.PORT || "4000", 10);
