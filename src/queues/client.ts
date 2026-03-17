@@ -18,6 +18,10 @@ export function getBullMQConnectionOptions() {
 /**
  * Creates a BullMQ Queue instance for use as a producer (job enqueueing only).
  * No Worker is instantiated here.
+ *
+ * Note: BullMQ bundles its own ioredis version — we cannot pass a project-level
+ * Redis instance due to structural type incompatibility between the two copies.
+ * Plain connection options are the correct interface here.
  */
 export function createQueue(name: string): Queue {
   return new Queue(name, {

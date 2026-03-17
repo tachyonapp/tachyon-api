@@ -3,7 +3,7 @@ import { BullMQAdapter } from "@bull-board/api/bullMQAdapter";
 import { ExpressAdapter } from "@bull-board/express";
 import basicAuth from "basic-auth-connect";
 import { type Express } from "express";
-import { allQueues } from "./queues";
+import { getAllQueues } from "../queues";
 
 export function mountDashboard(app: Express): void {
   if (process.env.NODE_ENV === "production") return;
@@ -12,7 +12,7 @@ export function mountDashboard(app: Express): void {
   serverAdapter.setBasePath("/internal/bull-board");
 
   createBullBoard({
-    queues: allQueues.map((q) => new BullMQAdapter(q)),
+    queues: getAllQueues().map((q) => new BullMQAdapter(q)),
     serverAdapter,
   });
 
@@ -30,3 +30,4 @@ export function mountDashboard(app: Express): void {
   app.use("/internal/bull-board", serverAdapter.getRouter());
   console.log("Bull Board mounted at /internal/bull-board");
 }
+
