@@ -62,3 +62,8 @@ export const ProposalSideEnum = builder.enumType("ProposalSide", {
 export const OrderEntryTypeEnum = builder.enumType("OrderEntryType", {
   values: ["MARKET", "LIMIT"] as const,
 });
+
+// Mirrors DB enum: broker_conn_status
+export const BrokerConnStatusEnum = builder.enumType("BrokerConnStatus", {
+  values: ["ACTIVE", "ERROR", "REVOKED"] as const,
+});

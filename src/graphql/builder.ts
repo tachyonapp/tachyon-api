@@ -8,7 +8,7 @@ import type {
   BotsRow,
   ProposalsRow,
   PositionsRow,
-  AccountsRow,
+  BrokerConnectionsRow,
 } from "@tachyonapp/tachyon-db";
 
 // BalanceSummary is a computed aggregate — not a direct DB row
@@ -40,7 +40,7 @@ export const builder = new SchemaBuilder<{
     Bot: BotsRow;
     Proposal: ProposalsRow;
     Position: PositionsRow;
-    BrokerAccount: AccountsRow;
+    Account: BrokerConnectionsRow;
     Balance: BalanceSummary;
   };
   Scalars: {
