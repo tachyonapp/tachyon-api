@@ -76,9 +76,19 @@ async function provisionUser(
     .onConflict((oc) => oc.column("auth0_subject").doNothing())
     .execute();
 
-  return db
+  const newUser = await db
     .selectFrom("users")
     .select("id")
     .where("auth0_subject", "=", auth0Id)
     .executeTakeFirstOrThrow();
+
+  // Ensure the user has a cash account row — ON CONFLICT DO NOTHING is safe
+  // against concurrent first-requests racing to create the same user.
+  await db
+    .insertInto("user_cash_accounts")
+    .values({ user_id: newUser.id, balance: "0" })
+    .onConflict((oc) => oc.column("user_id").doNothing())
+    .execute();
+
+  return newUser;
 }
