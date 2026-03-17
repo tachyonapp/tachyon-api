@@ -7,7 +7,7 @@ import {
 } from "../../types/enums";
 import { ValidationError, NotFoundError } from "../../types/errors";
 import { assertOwnership } from "../../../auth/authorization";
-import { scanBotQueue, reconciliationQueue } from "../../../queues";
+import { getScanBotQueue, getReconciliationQueue } from "../../../queues";
 import { QUEUE_NAMES } from "@tachyonapp/tachyon-queue-types";
 import type {
   ScanBotJobPayload,
@@ -338,7 +338,7 @@ builder.mutationField("activateBot", (t) =>
         userId: ctx.auth!.userId,
       };
 
-      await scanBotQueue.add(QUEUE_NAMES.SCAN_BOT, payload, {
+      await getScanBotQueue().add(QUEUE_NAMES.SCAN_BOT, payload, {
         attempts: 3,
         backoff: { type: "exponential", delay: 2000 },
       });
@@ -428,7 +428,7 @@ builder.mutationField("deleteBot", (t) =>
           enqueuedAt: new Date().toISOString(),
         };
 
-        await reconciliationQueue.add(QUEUE_NAMES.RECONCILIATION, payload, {
+        await getReconciliationQueue().add(QUEUE_NAMES.RECONCILIATION, payload, {
           attempts: 3,
           backoff: { type: "exponential", delay: 2000 },
         });

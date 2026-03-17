@@ -1,7 +1,7 @@
 import { builder } from "../../builder";
 import { NotFoundError, AuthError } from "../../types/errors";
 import { assertOwnership } from "../../../auth/authorization";
-import { reconciliationQueue } from "../../../queues";
+import { getReconciliationQueue } from "../../../queues";
 import { QUEUE_NAMES } from "@tachyonapp/tachyon-queue-types";
 import type { OrderSubmitPayload } from "@tachyonapp/tachyon-queue-types";
 
@@ -82,7 +82,7 @@ builder.mutationField("approveProposal", (t) =>
         enqueuedAt: new Date().toISOString(),
       };
 
-      await reconciliationQueue.add(QUEUE_NAMES.RECONCILIATION, payload, {
+      await getReconciliationQueue().add(QUEUE_NAMES.RECONCILIATION, payload, {
         attempts: 3,
         backoff: { type: "exponential", delay: 2000 },
       });

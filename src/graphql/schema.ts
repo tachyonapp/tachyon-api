@@ -1,5 +1,18 @@
 import { builder } from "./builder";
 
+/** Root type declarations
+ *
+ * Required by Pothos before any queryField/mutationField/subscriptionField Calls
+ * can be assembled into a schema.
+ *
+ * The {} means "no extra config" — all the actual fields are registered by the individual
+ * builder.queryField() / builder.mutationField() calls scattered across domain files.
+ * The root type declarations are just the containers.
+ */
+builder.queryType({});
+builder.mutationType({});
+builder.subscriptionType({});
+
 // Import order: shared types before domain types, types before queries/mutations
 import "./types/scalars";
 import "./types/errors";
