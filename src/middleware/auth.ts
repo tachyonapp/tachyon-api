@@ -6,9 +6,9 @@ import { getDb } from "../lib/db";
 import { logger } from "../lib/logger";
 
 /**
- * Auth0 JWT middleware.
+ * Clerk JWT middleware.
  *
- * Verifies the Bearer token from the Authorization header using Auth0's JWKS
+ * Verifies the Bearer token from the Authorization header using Clerk's JWKS
  * endpoint, then resolves (or provisions) the local users record for the
  * authenticated subject. The resolved auth context is attached to req.auth
  * for downstream use by the Apollo context builder.
@@ -17,7 +17,7 @@ import { logger } from "../lib/logger";
  * req.auth being undefined. Resolver-level authorization is enforced by
  * Pothos scope-auth, which returns UNAUTHENTICATED via GraphQL errors.
  */
-export async function auth0JwtMiddleware(
+export async function clerkJwtMiddleware(
   req: Request,
   _res: Response,
   next: NextFunction,
@@ -38,7 +38,7 @@ export async function auth0JwtMiddleware(
       sub: claims.sub,
       email: claims.email,
       userId: user.id,
-      roles: claims["https://tachyon.app/roles"] ?? [],
+      roles: claims.publicMetadata?.roles ?? [],
     };
 
     next();
@@ -52,6 +52,7 @@ export async function auth0JwtMiddleware(
   }
 }
 
+// TODO:: The `auth0_subject` DB column name is a legacy field name. Change it in migration
 async function provisionUser(
   db: Kysely<DB>,
   auth0Id: string,

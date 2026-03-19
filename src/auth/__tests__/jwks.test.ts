@@ -12,37 +12,38 @@ let verifyToken: typeof VerifyTokenFn;
 beforeEach(async () => {
   jest.resetModules();
   mockJwtVerify.mockReset();
-  process.env.AUTH0_DOMAIN = "test.auth0.com";
-  process.env.AUTH0_AUDIENCE = "https://api.tachyon.app";
+  process.env.CLERK_JWKS_URL =
+    "https://test-clerk.clerk.accounts.dev/.well-known/jwks.json";
+  process.env.CLERK_ISSUER = "https://test-clerk.clerk.accounts.dev";
   ({ verifyToken } = await import("../jwks"));
 });
 
 describe("verifyToken", () => {
   it("returns VerifiedClaims when jose resolves a valid payload", async () => {
     const mockPayload = {
-      sub: "auth0|123",
+      sub: "user_test123",
       email: "user@example.com",
-      "https://tachyon.app/roles": ["trader"],
-      aud: "https://api.tachyon.app",
+      publicMetadata: { roles: ["trader"] },
       exp: Math.floor(Date.now() / 1000) + 3600,
     };
     mockJwtVerify.mockResolvedValue({ payload: mockPayload });
 
     const claims = await verifyToken("valid.jwt.token");
 
-    expect(claims.sub).toBe("auth0|123");
-    expect(claims.email).toBe("user@example.com");
-    expect(claims["https://tachyon.app/roles"]).toEqual(["trader"]);
+    expect(claims.sub).toBe("user_test123");
+    expect(claims.publicMetadata?.roles).toEqual(["trader"]);
   });
 
   it("throws when jose rejects (expired token)", async () => {
     mockJwtVerify.mockRejectedValue(new Error("jwt expired"));
 
-    await expect(verifyToken("expired.jwt.token")).rejects.toThrow("jwt expired");
+    await expect(verifyToken("expired.jwt.token")).rejects.toThrow(
+      "jwt expired",
+    );
   });
 
   it("throws when jose rejects (wrong audience)", async () => {
-    mockJwtVerify.mockRejectedValue(new Error("unexpected \"aud\" claim value"));
+    mockJwtVerify.mockRejectedValue(new Error('unexpected "aud" claim value'));
 
     await expect(verifyToken("wrong-aud.token")).rejects.toThrow("unexpected");
   });
@@ -50,9 +51,8 @@ describe("verifyToken", () => {
   it("calls jwtVerify with the correct audience and issuer from env", async () => {
     mockJwtVerify.mockResolvedValue({
       payload: {
-        sub: "auth0|123",
+        sub: "user_test123",
         email: "u@example.com",
-        aud: "https://api.tachyon.app",
         exp: 9999999999,
       },
     });
@@ -63,8 +63,7 @@ describe("verifyToken", () => {
       "some.jwt.token",
       "mock-jwks",
       expect.objectContaining({
-        audience: "https://api.tachyon.app",
-        issuer: "https://test.auth0.com/",
+        issuer: "https://test-clerk.clerk.accounts.dev",
       }),
     );
   });

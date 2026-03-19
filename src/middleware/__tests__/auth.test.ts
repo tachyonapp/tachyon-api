@@ -1,5 +1,5 @@
 import type { Request, Response, NextFunction } from "express";
-import type { auth0JwtMiddleware as AuthFn } from "../auth";
+import type { clerkJwtMiddleware as AuthFn } from "../auth";
 
 // ─── Valkey/JWT mocks ─────────────────────────────────────────────────────────
 
@@ -64,10 +64,10 @@ function callMiddleware(
   response: Response,
   next: NextFunction,
 ) {
-  return auth0JwtMiddleware(req as unknown as Request, response, next);
+  return clerkJwtMiddleware(req as unknown as Request, response, next);
 }
 
-let auth0JwtMiddleware: typeof AuthFn;
+let clerkJwtMiddleware: typeof AuthFn;
 
 beforeEach(async () => {
   jest.resetModules();
@@ -76,12 +76,12 @@ beforeEach(async () => {
   mockExecuteTakeFirstOrThrow.mockReset();
   mockExecute.mockResolvedValue(undefined);
   mockDb.insertInto.mockReturnThis();
-  ({ auth0JwtMiddleware } = await import("../auth"));
+  ({ clerkJwtMiddleware } = await import("../auth"));
 });
 
 // ─── Tests ────────────────────────────────────────────────────────────────────
 
-describe("auth0JwtMiddleware", () => {
+describe("clerkJwtMiddleware", () => {
   describe("missing Authorization header", () => {
     it("calls next() without setting req.auth", async () => {
       const req = mockReq();
@@ -121,9 +121,9 @@ describe("auth0JwtMiddleware", () => {
   describe("valid JWT — existing user", () => {
     it("populates req.auth and calls next()", async () => {
       mockVerifyToken.mockResolvedValue({
-        sub: "auth0|123",
+        sub: "user_test123",
         email: "user@example.com",
-        "https://tachyon.app/roles": ["trader"],
+        publicMetadata: { roles: ["trader"] },
       });
       mockExecuteTakeFirst.mockResolvedValue({ id: "existing-user-id" });
 
@@ -133,7 +133,7 @@ describe("auth0JwtMiddleware", () => {
       await callMiddleware(req, res, next);
 
       expect(req.auth).toEqual({
-        sub: "auth0|123",
+        sub: "user_test123",
         email: "user@example.com",
         userId: "existing-user-id",
         roles: ["trader"],
@@ -143,9 +143,9 @@ describe("auth0JwtMiddleware", () => {
 
     it("does not INSERT when user record already exists", async () => {
       mockVerifyToken.mockResolvedValue({
-        sub: "auth0|123",
+        sub: "user_test123",
         email: "user@example.com",
-        "https://tachyon.app/roles": [],
+        publicMetadata: { roles: ["trader"] },
       });
       mockExecuteTakeFirst.mockResolvedValue({ id: "existing-user-id" });
 
@@ -162,9 +162,9 @@ describe("auth0JwtMiddleware", () => {
   describe("valid JWT — new user (first login)", () => {
     it("inserts a new user record and sets req.auth.userId to the new id", async () => {
       mockVerifyToken.mockResolvedValue({
-        sub: "auth0|new",
-        email: "new@example.com",
-        "https://tachyon.app/roles": [],
+        sub: "user_test123",
+        email: "user@example.com",
+        publicMetadata: { roles: ["trader"] },
       });
       // First SELECT returns null (user not found); second returns the new record
       mockExecuteTakeFirst.mockResolvedValue(null);
