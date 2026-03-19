@@ -15,7 +15,7 @@ import { buildContext } from "./context";
 import { formatError } from "./errors/formatter";
 import { correlationIdMiddleware } from "./middleware/correlationId";
 import { rateLimitMiddleware } from "./middleware/rateLimit";
-import { auth0JwtMiddleware } from "./middleware/auth";
+import { clerkJwtMiddleware } from "./middleware/auth";
 import { logger } from "./lib/logger";
 import { mountDashboard } from "./bullboard/bullboard";
 import { checkPostgres, checkValkey } from "./health";
@@ -25,7 +25,6 @@ import pinoHttp from "pino-http";
 // React Native / Expo does not send an Origin header, so CORS is a no-op for mobile.
 // When the web admin dashboard is built, restrict origin to 'https://admin.tachyon.app'
 // via ALLOWED_ORIGINS env var. Add ALLOWED_ORIGINS to tachyon-infra .env.example at that time.
-
 export async function createApp() {
   const app = express();
 
@@ -114,7 +113,7 @@ export async function createApp() {
     json(),
     correlationIdMiddleware,
     rateLimitMiddleware,
-    auth0JwtMiddleware,
+    clerkJwtMiddleware,
     expressMiddleware(server, {
       context: async ({ req }: ExpressContextFunctionArgument) =>
         buildContext(req),
