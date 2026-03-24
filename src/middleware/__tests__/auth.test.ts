@@ -1,45 +1,25 @@
 import type { Request, Response, NextFunction } from "express";
 import type { clerkJwtMiddleware as AuthFn } from "../auth";
 
-// ─── Valkey/JWT mocks ─────────────────────────────────────────────────────────
+// ─── Mocks ────────────────────────────────────────────────────────────────────
 
 const mockVerifyToken = jest.fn();
 jest.mock("../../auth/jwks", () => ({ verifyToken: mockVerifyToken }));
 jest.mock("../../lib/logger", () => ({ logger: { warn: jest.fn() } }));
 
-// ─── Kysely chain mock ────────────────────────────────────────────────────────
-// All intermediate methods return the mock object for chaining.
-// Terminal methods are jest.fn() so individual tests can override return values.
-
 const mockExecuteTakeFirst = jest.fn();
-const mockExecuteTakeFirstOrThrow = jest.fn();
-const mockExecute = jest.fn().mockResolvedValue(undefined);
 
 const mockDb = {
   selectFrom: jest.fn().mockReturnThis(),
   select: jest.fn().mockReturnThis(),
   where: jest.fn().mockReturnThis(),
   executeTakeFirst: mockExecuteTakeFirst,
-  executeTakeFirstOrThrow: mockExecuteTakeFirstOrThrow,
-  insertInto: jest.fn().mockReturnThis(),
-  values: jest.fn().mockReturnThis(),
-  onConflict: jest.fn().mockImplementation((cb: (oc: unknown) => unknown) => {
-    cb({
-      column: jest
-        .fn()
-        .mockReturnValue({ doNothing: jest.fn().mockReturnThis() }),
-    });
-    return mockDb;
-  }),
-  execute: mockExecute,
 };
 
 jest.mock("../../lib/db", () => ({ getDb: jest.fn().mockReturnValue(mockDb) }));
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-// Defines the properties our middleware reads/writes on req, without relying on
-// the global Express augmentation being in scope for test-side assertions.
 interface MockRequest {
   headers: Record<string, string>;
   correlationId: string;
@@ -57,8 +37,6 @@ function mockReq(headers: Record<string, string> = {}): MockRequest {
 
 const res = {} as Response;
 
-// ─── Test setup ───────────────────────────────────────────────────────────────
-
 function callMiddleware(
   req: MockRequest,
   response: Response,
@@ -73,9 +51,6 @@ beforeEach(async () => {
   jest.resetModules();
   mockVerifyToken.mockReset();
   mockExecuteTakeFirst.mockReset();
-  mockExecuteTakeFirstOrThrow.mockReset();
-  mockExecute.mockResolvedValue(undefined);
-  mockDb.insertInto.mockReturnThis();
   ({ clerkJwtMiddleware } = await import("../auth"));
 });
 
@@ -141,7 +116,7 @@ describe("clerkJwtMiddleware", () => {
       expect(next).toHaveBeenCalledTimes(1);
     });
 
-    it("does not INSERT when user record already exists", async () => {
+    it("does not INSERT when user record exists", async () => {
       mockVerifyToken.mockResolvedValue({
         sub: "user_test123",
         email: "user@example.com",
@@ -155,28 +130,28 @@ describe("clerkJwtMiddleware", () => {
         jest.fn(),
       );
 
-      expect(mockDb.insertInto).not.toHaveBeenCalled();
+      expect(mockDb.selectFrom).toHaveBeenCalledWith("users");
+      // No insert — provisioning is handled by the webhook, not here
+      expect(mockDb).not.toHaveProperty("insertInto");
     });
   });
 
-  describe("valid JWT — new user (first login)", () => {
-    it("inserts a new user record and sets req.auth.userId to the new id", async () => {
+  describe("valid JWT — user not provisioned (webhook missed)", () => {
+    it("calls next() without setting req.auth when user row is missing", async () => {
       mockVerifyToken.mockResolvedValue({
         sub: "user_test123",
         email: "user@example.com",
-        publicMetadata: { roles: ["trader"] },
+        publicMetadata: {},
       });
-      // First SELECT returns null (user not found); second returns the new record
-      mockExecuteTakeFirst.mockResolvedValue(null);
-      mockExecuteTakeFirstOrThrow.mockResolvedValue({ id: "new-user-id" });
+      // No row in DB — webhook never fired
+      mockExecuteTakeFirst.mockResolvedValue(undefined);
 
       const req = mockReq({ authorization: "Bearer valid.jwt.token" });
       const next: NextFunction = jest.fn();
 
       await callMiddleware(req, res, next);
 
-      expect(mockDb.insertInto).toHaveBeenCalledWith("users");
-      expect(req.auth?.userId).toBe("new-user-id");
+      expect(req.auth).toBeUndefined();
       expect(next).toHaveBeenCalledTimes(1);
     });
   });

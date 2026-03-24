@@ -16,6 +16,7 @@ import { formatError } from "./errors/formatter";
 import { correlationIdMiddleware } from "./middleware/correlationId";
 import { rateLimitMiddleware } from "./middleware/rateLimit";
 import { clerkJwtMiddleware } from "./middleware/auth";
+import { clerkWebhookHandler } from "./webhooks/clerk";
 import { logger } from "./lib/logger";
 import { mountDashboard } from "./bullboard/bullboard";
 import { checkPostgres, checkValkey } from "./health";
@@ -87,6 +88,14 @@ export async function createApp() {
       res.status(503).json({ status: "not ready" });
     }
   });
+
+  // Clerk webhook — must use raw body so Svix can verify the HMAC signature.
+  // Mounted before any json() body-parser middleware.
+  app.post(
+    "/webhooks/clerk",
+    express.raw({ type: "application/json" }),
+    clerkWebhookHandler,
+  );
 
   // Bull Board dashboard (non-prod only)
   mountDashboard(app);
