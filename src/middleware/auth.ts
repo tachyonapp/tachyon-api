@@ -9,9 +9,11 @@ import { logger } from "../lib/logger";
  * Clerk JWT middleware.
  *
  * Verifies the Bearer token from the Authorization header using Clerk's JWKS
- * endpoint, then resolves (or provisions) the local users record for the
- * authenticated subject. The resolved auth context is attached to req.auth
- * for downstream use by the Apollo context builder.
+ * endpoint, then looks up the local users record for the authenticated subject.
+ *
+ * User provisioning is handled upstream by the POST /webhooks/clerk handler
+ * on the user.created Clerk event. If a valid JWT arrives for a subject
+ * with no users row, authentication fails with a warning.
  *
  * Intentionally never returns 401 — invalid or missing tokens result in
  * req.auth being undefined. Resolver-level authorization is enforced by
@@ -24,7 +26,7 @@ export async function clerkJwtMiddleware(
 ): Promise<void> {
   const authHeader = req.headers["authorization"];
   if (!authHeader?.startsWith("Bearer ")) {
-    return next(); // unauthenticated — resolver scope-auth will enforce
+    return next();
   }
 
   const token = authHeader.slice(7);
@@ -32,7 +34,7 @@ export async function clerkJwtMiddleware(
   try {
     const claims = await verifyToken(token);
     const db: Kysely<DB> = getDb();
-    const user = await provisionUser(db, claims.sub, claims.email);
+    const user = await lookupUser(db, claims.sub);
 
     req.auth = {
       sub: claims.sub,
@@ -43,53 +45,30 @@ export async function clerkJwtMiddleware(
 
     next();
   } catch (err) {
-    // JWT invalid/expired — do NOT return 401; let Apollo scope-auth return UNAUTHENTICATED
     logger.warn(
       { correlationId: req.correlationId, err },
-      "JWT verification failed",
+      "JWT authentication failed",
     );
     next();
   }
 }
 
-// TODO:: The `auth0_subject` DB column name is a legacy field name. Change it in migration
-async function provisionUser(
+// TODO: The `auth0_subject` DB column name is a legacy field name. Change it in a migration.
+async function lookupUser(
   db: Kysely<DB>,
-  auth0Id: string,
-  email: string,
+  clerkSubject: string,
 ): Promise<{ id: string }> {
-  // Hot path: existing user
-  const existing = await db
+  const user = await db
     .selectFrom("users")
     .select("id")
-    .where("auth0_subject", "=", auth0Id)
+    .where("auth0_subject", "=", clerkSubject)
     .executeTakeFirst();
 
-  if (existing) return existing;
+  if (!user) {
+    throw new Error(
+      `No users row for Clerk subject ${clerkSubject} — webhook may not have fired`,
+    );
+  }
 
-  // First login — ON CONFLICT DO NOTHING handles concurrent first-requests.
-  // NOTE: display_name is seeded from the email username and can be updated by the
-  // user later via the profile mutation.
-  const displayName = email.split("@")[0];
-  await db
-    .insertInto("users")
-    .values({ auth0_subject: auth0Id, email, display_name: displayName })
-    .onConflict((oc) => oc.column("auth0_subject").doNothing())
-    .execute();
-
-  const newUser = await db
-    .selectFrom("users")
-    .select("id")
-    .where("auth0_subject", "=", auth0Id)
-    .executeTakeFirstOrThrow();
-
-  // Ensure the user has a cash account row — ON CONFLICT DO NOTHING is safe
-  // against concurrent first-requests racing to create the same user.
-  await db
-    .insertInto("user_cash_accounts")
-    .values({ user_id: newUser.id, balance: "0" })
-    .onConflict((oc) => oc.column("user_id").doNothing())
-    .execute();
-
-  return newUser;
+  return user;
 }
