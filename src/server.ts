@@ -106,6 +106,7 @@ export async function createApp() {
     schema,
     introspection: process.env.NODE_ENV !== "production",
     formatError,
+    allowBatchedHttpRequests: false,
     plugins: [
       ApolloServerPluginLandingPageDisabled(),
       ApolloServerPluginInlineTraceDisabled(), // No Apollo Studio telemetry
