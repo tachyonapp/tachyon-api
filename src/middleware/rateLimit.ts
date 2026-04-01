@@ -12,6 +12,7 @@
  * 4. Add current request as member with score = now
  * 5. Set key TTL to windowSeconds + 1
  */
+import { SLIDING_WINDOW_LUA } from "./operationRateLimit";
 import type { Request, Response, NextFunction } from "express";
 import type Redis from "ioredis";
 import { getValkey } from "../lib/valkey";
@@ -58,14 +59,25 @@ export async function rateLimitMiddleware(
   const cutoff = now - windowMs;
   const member = req.correlationId;
 
-  const pipeline = valkey.pipeline();
-  pipeline.zremrangebyscore(key, "-inf", cutoff);
-  pipeline.zcard(key);
-  pipeline.zadd(key, now, member);
-  pipeline.expire(key, windowSeconds + 1);
-
-  const results = await pipeline.exec();
-  const count = (results?.[1]?.[1] as number) ?? 0;
+  /**
+   * Important behavioral note:
+   *
+   * The Lua script returns the count of existing members BEFORE adding
+   * the new memeber and skips 'ZADD'. This means that the guard condition
+   * `if count >= maxRequests` is already correct - no change needed to
+   * the rejection logic below it.
+   *
+   */
+  const count = (await valkey.eval(
+    SLIDING_WINDOW_LUA,
+    1,
+    key,
+    String(cutoff),
+    String(now),
+    member,
+    String(maxRequests),
+    String(windowSeconds + 1),
+  )) as number;
 
   if (count >= maxRequests) {
     const retryAfter = Math.ceil(windowSeconds - (now - cutoff) / 1000);
