@@ -1,3 +1,7 @@
+import {
+  withOpRateLimit,
+  OP_RATE_LIMITS,
+} from "../../../middleware/operationRateLimit";
 import { builder } from "../../builder";
 import { NotFoundError, AuthError } from "../../types/errors";
 import { assertOwnership } from "../../../auth/authorization";
@@ -37,6 +41,14 @@ builder.mutationField("approveProposal", (t) =>
     args: { id: t.arg.id({ required: true }) },
     authScopes: { authenticated: true },
     resolve: async (_root, args, ctx) => {
+      // rate limit check
+      await withOpRateLimit(
+        ctx,
+        "approveProposal",
+        OP_RATE_LIMITS.approveProposal.limit,
+        OP_RATE_LIMITS.approveProposal.windowSeconds,
+      );
+
       const proposal = await ctx.db
         .selectFrom("trade_proposals")
         .selectAll()
@@ -102,6 +114,14 @@ builder.mutationField("skipProposal", (t) =>
     args: { id: t.arg.id({ required: true }) },
     authScopes: { authenticated: true },
     resolve: async (_root, args, ctx) => {
+      // rate limit check
+      await withOpRateLimit(
+        ctx,
+        "skipProposal",
+        OP_RATE_LIMITS.skipProposal.limit,
+        OP_RATE_LIMITS.skipProposal.windowSeconds,
+      );
+
       const proposal = await ctx.db
         .selectFrom("trade_proposals")
         .selectAll()

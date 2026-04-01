@@ -1,3 +1,7 @@
+import {
+  withOpRateLimit,
+  OP_RATE_LIMITS,
+} from "../../../middleware/operationRateLimit";
 import { builder } from "../../builder";
 import { ValidationError } from "../../types/errors";
 
@@ -17,8 +21,13 @@ builder.mutationField("connectBroker", (t) =>
       credentials: t.arg.string({ required: true }),
     },
     authScopes: { authenticated: true },
-    resolve: async (_root, _args, _ctx) => {
-      console.log(_root, _args, _ctx);
+    resolve: async (_root, _args, ctx) => {
+      await withOpRateLimit(
+        ctx,
+        "connectBroker",
+        OP_RATE_LIMITS.connectBroker.limit,
+        OP_RATE_LIMITS.connectBroker.windowSeconds,
+      );
       // TODO:: (Feature-13 — Broker Integration): Stub for MVP.
       //
       // Full implementation requires the Broker Integration TDD (Phase 4, Feature 13):

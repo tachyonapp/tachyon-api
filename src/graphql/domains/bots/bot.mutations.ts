@@ -1,3 +1,7 @@
+import {
+  withOpRateLimit,
+  OP_RATE_LIMITS,
+} from "../../../middleware/operationRateLimit";
 import { builder } from "../../builder";
 import {
   BotFrameEnum,
@@ -81,6 +85,14 @@ builder.mutationField("createBot", (t) =>
     args: { input: t.arg({ type: CreateBotInput, required: true }) },
     authScopes: { authenticated: true },
     resolve: async (_root, args, ctx) => {
+      // rate limit check
+      await withOpRateLimit(
+        ctx,
+        "createBot",
+        OP_RATE_LIMITS.createBot.limit,
+        OP_RATE_LIMITS.createBot.windowSeconds,
+      );
+
       const { input } = args;
 
       if (parseFloat(input.allocationPct) <= 0) {
@@ -303,6 +315,13 @@ builder.mutationField("activateBot", (t) =>
     args: { id: t.arg.id({ required: true }) },
     authScopes: { authenticated: true },
     resolve: async (_root, args, ctx) => {
+      // rate limit check
+      await withOpRateLimit(
+        ctx,
+        "activateBot",
+        OP_RATE_LIMITS.activateBot.limit,
+        OP_RATE_LIMITS.activateBot.windowSeconds,
+      );
       const bot = await ctx.db
         .selectFrom("bots")
         .selectAll()
@@ -358,6 +377,14 @@ builder.mutationField("pauseBot", (t) =>
     args: { id: t.arg.id({ required: true }) },
     authScopes: { authenticated: true },
     resolve: async (_root, args, ctx) => {
+      // rate limit check
+      await withOpRateLimit(
+        ctx,
+        "pauseBot",
+        OP_RATE_LIMITS.pauseBot.limit,
+        OP_RATE_LIMITS.pauseBot.windowSeconds,
+      );
+
       const existing = await ctx.db
         .selectFrom("bots")
         .select(["id", "user_id", "status"])
@@ -428,10 +455,14 @@ builder.mutationField("deleteBot", (t) =>
           enqueuedAt: new Date().toISOString(),
         };
 
-        await getReconciliationQueue().add(QUEUE_NAMES.RECONCILIATION, payload, {
-          attempts: 3,
-          backoff: { type: "exponential", delay: 2000 },
-        });
+        await getReconciliationQueue().add(
+          QUEUE_NAMES.RECONCILIATION,
+          payload,
+          {
+            attempts: 3,
+            backoff: { type: "exponential", delay: 2000 },
+          },
+        );
       }
 
       return updated;
