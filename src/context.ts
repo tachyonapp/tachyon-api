@@ -10,7 +10,7 @@ import { getValkey } from "./lib/valkey";
 /**
  * AuthContext — the verified identity attached to an authenticated request.
  *
- * Populated by auth0JwtMiddleware after successful JWT verification. Contains
+ * Populated by clerkJwtMiddleware after successful JWT verification. Contains
  * both the raw Auth0 claims (sub, email) and the resolved local users.id (userId)
  * so resolvers never need to re-query the DB just to find out who is asking.
  *
