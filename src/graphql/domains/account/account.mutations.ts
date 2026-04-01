@@ -28,7 +28,6 @@ builder.mutationField("connectBroker", (t) =>
         OP_RATE_LIMITS.connectBroker.limit,
         OP_RATE_LIMITS.connectBroker.windowSeconds,
       );
-      console.log(_root, _args, ctx);
       // TODO:: (Feature-13 — Broker Integration): Stub for MVP.
       //
       // Full implementation requires the Broker Integration TDD (Phase 4, Feature 13):

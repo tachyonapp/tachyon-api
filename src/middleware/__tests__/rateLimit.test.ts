@@ -1,20 +1,6 @@
 import type { Request, Response, NextFunction } from "express";
 import type { rateLimitMiddleware as RateLimitFn } from "../rateLimit";
 
-// Pipeline mock — controls the zcard result returned by exec()
-// const mockExec = jest.fn();
-// const mockPipeline = {
-//   zremrangebyscore: jest.fn().mockReturnThis(),
-//   zcard: jest.fn().mockReturnThis(),
-//   zadd: jest.fn().mockReturnThis(),
-//   expire: jest.fn().mockReturnThis(),
-//   exec: mockExec,
-// };
-
-// jest.mock('../../lib/valkey', () => ({
-//   getValkey: jest.fn().mockReturnValue({ pipeline: jest.fn().mockReturnValue(mockPipeline) }),
-// }));
-
 // eval mock — returns the count directly (the value SLIDING_WINDOW_LUA returns)
 const mockEval = jest.fn();
 

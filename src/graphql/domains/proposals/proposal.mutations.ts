@@ -118,8 +118,8 @@ builder.mutationField("skipProposal", (t) =>
       await withOpRateLimit(
         ctx,
         "skipProposal",
-        OP_RATE_LIMITS.approveProposal.limit,
-        OP_RATE_LIMITS.approveProposal.windowSeconds,
+        OP_RATE_LIMITS.skipProposal.limit,
+        OP_RATE_LIMITS.skipProposal.windowSeconds,
       );
 
       const proposal = await ctx.db

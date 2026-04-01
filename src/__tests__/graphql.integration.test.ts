@@ -17,6 +17,7 @@ import type { ApolloServer } from "@apollo/server";
 import { getTestKeyPair, generateTestJwt } from "./helpers/jwt";
 import { createLocalJWKSet, type JWK } from "jose";
 import type { VerifiedClaims } from "../auth/jwks";
+import { getValkey } from "../lib/valkey";
 
 // ─── JWKS mock ────────────────────────────────────────────────────────────────
 // Replace the remote JWKS fetch with our local test key pair so tests never
@@ -215,5 +216,103 @@ describe("POST /graphql — rate limiting", () => {
     const blocked = responses.find((r) => r.status === 429);
     expect(blocked?.body.errors[0].extensions.code).toBe("RATE_LIMITED");
     expect(blocked?.headers["retry-after"]).toBeDefined();
+  });
+});
+
+// ─── Per-operation rate limiting ──────────────────────────────────────────────
+
+describe("POST /graphql — per-operation rate limiting", () => {
+  // Each test uses a unique sub so rate limit state never bleeds between tests.
+  // afterEach flushes all rate:op: keys from Valkey as a belt-and-suspenders guard.
+  afterEach(async () => {
+    const valkey = getValkey();
+    const keys = await valkey.keys("rate:op:*");
+    if (keys.length > 0) await valkey.del(...keys);
+  });
+
+  it("allows the first 10 approveProposal calls and blocks the 11th with RATE_LIMITED", async () => {
+    const { token } = await generateTestJwt({
+      sub: "auth0|rl-approve-1",
+      email: "rl-approve-1@test.com",
+    });
+
+    const mutation = `
+      mutation ApproveProposal($id: ID!) {
+        approveProposal(id: $id) {
+          ... on Proposal { id }
+          ... on NotFoundError { message }
+          ... on AuthError { message }
+        }
+      }
+    `;
+
+    // Calls 1–10: withOpRateLimit passes; resolver returns NotFoundError because
+    // proposal id 999999 does not exist — but no RATE_LIMITED error in the response.
+    for (let i = 1; i <= 10; i++) {
+      const res = await authedRequest(token).send(
+        gql(mutation, { id: "999999" }),
+      );
+      expect(res.status).toBe(200);
+      const errors: Array<{ extensions?: { code?: string } }> = res.body.errors ?? [];
+      expect(errors.some((e) => e?.extensions?.code === "RATE_LIMITED")).toBe(false);
+    }
+
+    // Call 11: withOpRateLimit throws — Apollo returns RATE_LIMITED in errors array,
+    // HTTP status remains 200 (not 429).
+    const res11 = await authedRequest(token).send(
+      gql(mutation, { id: "999999" }),
+    );
+    expect(res11.status).toBe(200);
+    expect(res11.body.errors).toBeDefined();
+
+    const rateLimitError = res11.body.errors.find(
+      (e: { extensions?: { code?: string } }) => e?.extensions?.code === "RATE_LIMITED",
+    );
+    expect(rateLimitError).toBeDefined();
+    expect(typeof rateLimitError.extensions.retryAfter).toBe("number");
+    expect(rateLimitError.extensions.operation).toBe("approveProposal");
+  });
+
+  it("rate limits are per-user — a second user is unaffected by the first user's limit exhaustion", async () => {
+    const { token: tokenA } = await generateTestJwt({
+      sub: "auth0|rl-isolation-a",
+      email: "rl-isolation-a@test.com",
+    });
+    const { token: tokenB } = await generateTestJwt({
+      sub: "auth0|rl-isolation-b",
+      email: "rl-isolation-b@test.com",
+    });
+
+    const mutation = `
+      mutation ApproveProposal($id: ID!) {
+        approveProposal(id: $id) {
+          ... on Proposal { id }
+          ... on NotFoundError { message }
+          ... on AuthError { message }
+        }
+      }
+    `;
+
+    // Exhaust User A's 10-call limit
+    for (let i = 0; i < 10; i++) {
+      await authedRequest(tokenA).send(gql(mutation, { id: "999999" }));
+    }
+
+    // Confirm User A is now rate-limited
+    const resA = await authedRequest(tokenA).send(gql(mutation, { id: "999999" }));
+    expect(
+      resA.body.errors?.some(
+        (e: { extensions?: { code?: string } }) => e?.extensions?.code === "RATE_LIMITED",
+      ),
+    ).toBe(true);
+
+    // User B's first call must not be rate-limited — their window is independent
+    const resB = await authedRequest(tokenB).send(gql(mutation, { id: "999999" }));
+    expect(resB.status).toBe(200);
+    expect(
+      resB.body.errors?.some(
+        (e: { extensions?: { code?: string } }) => e?.extensions?.code === "RATE_LIMITED",
+      ),
+    ).toBe(false);
   });
 });
