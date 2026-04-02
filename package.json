@@ -21,7 +21,7 @@
     "@pothos/plugin-scope-auth": "^4.1.6",
     "@pothos/plugin-simple-objects": "^4.1.3",
     "@sentry/node": "^8.55.0",
-    "@tachyonapp/tachyon-db": "^0.2.4",
+    "@tachyonapp/tachyon-db": "^0.2.5",
     "@tachyonapp/tachyon-queue-types": "^1.0.2",
     "basic-auth-connect": "^1.1.0",
     "bullmq": "^5.71.0",
