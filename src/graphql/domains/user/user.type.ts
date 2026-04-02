@@ -13,5 +13,19 @@ builder.objectType("User", {
       type: "DateTime",
       resolve: (user) => new Date(user.created_at),
     }),
+    onboardingCompleted: t.field({
+      type: "Boolean",
+      nullable: false,
+      description: "Whether the user has completed the FTUE onboarding flow.",
+      resolve: async (user, _args, ctx) => {
+        const settings = await ctx.db
+          .selectFrom("user_settings")
+          .select("onboarding_completed")
+          .where("user_id", "=", user.id)
+          .executeTakeFirst();
+        // Default false if no row exists (new users before first settings write)
+        return settings?.onboarding_completed ?? false;
+      },
+    }),
   }),
 });
