@@ -98,6 +98,9 @@ scalar Decimal
 type Mutation {
   activateBot(id: ID!): BotResult
   approveProposal(id: ID!): ApproveProposalResult
+
+  """Mark the authenticated user's FTUE as complete. Idempotent."""
+  completeOnboarding: Boolean
   connectBroker(brokerName: String!, credentials: String!): ConnectBrokerResult
   createBot(input: CreateBotInput!): CreateBotResult
   deleteBot(id: ID!): BotResult
@@ -212,6 +215,9 @@ type User {
   createdAt: DateTime
   email: String
   id: ID
+
+  """Whether the user has completed the FTUE onboarding flow."""
+  onboardingCompleted: Boolean!
 }
 
 type ValidationError implements BaseError {
