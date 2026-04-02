@@ -33,6 +33,7 @@ import "./domains/positions/position.queries";
 import "./domains/account/account.queries";
 
 // Mutations
+import "./domains/user/user.mutations";
 import "./domains/bots/bot.mutations";
 import "./domains/proposals/proposal.mutations";
 import "./domains/account/account.mutations";
