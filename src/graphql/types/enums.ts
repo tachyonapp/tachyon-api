@@ -29,29 +29,40 @@ export const BotFrameEnum = builder.enumType("BotFrame", {
 });
 
 // Narrow type alias for bot_frames.name — used to safely cast the joined
-// frame_name string field (typed as string) in bot.type.ts resolvers
-export type BotFrameName =
-  | "SCOUT"
-  | "BRUISER"
-  | "SNIPER"
-  | "BERSERKER"
-  | "GUARDIAN"
-  | "BRAWLER";
+// frame_name string field (typed as string) in bot.type.ts resolvers.
+// See RiskAttitude below for $inferType explanation.
+export type BotFrameName = (typeof BotFrameEnum)["$inferType"];
 
 // Mirrors DB enum: risk_attitude
 export const RiskAttitudeEnum = builder.enumType("RiskAttitude", {
   values: ["CAUTIOUS", "BALANCED", "AGGRESSIVE"] as const,
 });
+// $inferType extracts the TypeScript union type from the Pothos EnumRef —
+// i.e. 'CAUTIOUS' | 'BALANCED' | 'AGGRESSIVE'. This keeps the enum values
+// as the single source of truth: adding/removing a value here automatically
+// updates this type without any manual duplication.
+export type RiskAttitude = (typeof RiskAttitudeEnum)["$inferType"];
 
 // Mirrors DB enum: trade_tempo
 export const TradeTempoEnum = builder.enumType("TradeTempo", {
   values: ["OPPORTUNISTIC", "ACTIVE", "RELENTLESS"] as const,
 });
+// See RiskAttitude above for $inferType explanation.
+export type TradeTempo = (typeof TradeTempoEnum)["$inferType"];
 
 // Mirrors DB enum: combat_patience
 export const CombatPatienceEnum = builder.enumType("CombatPatience", {
   values: ["PATIENT", "CALCULATED", "STRATEGIC", "IMPULSIVE"] as const,
 });
+// See RiskAttitude above for $inferType explanation.
+export type CombatPatience = (typeof CombatPatienceEnum)["$inferType"];
+
+// Mirrors DB enum: sector_filter
+export const SectorFilterEnum = builder.enumType("SectorFilter", {
+  values: ["TECH", "ENERGY", "FINANCIALS", "HEALTHCARE", "ETFS_ONLY", "MEGA_CAPS_ONLY", "LIQUID_LARGE_CAPS", "ANY"] as const,
+});
+// See RiskAttitude above for $inferType explanation.
+export type SectorFilter = (typeof SectorFilterEnum)["$inferType"];
 
 // Mirrors DB enum: proposal_side
 export const ProposalSideEnum = builder.enumType("ProposalSide", {
