@@ -164,7 +164,7 @@ builder.mutationField("createBot", (t) =>
           .insertInto("bot_settings")
           .values({
             bot_id: newBot.id,
-            daily_max_loss: input.dailyMaxLoss,
+            daily_max_loss_pct: input.dailyMaxLoss,
             daily_max_gain: input.dailyMaxGain,
             risk_attitude: input.riskAttitude,
             trade_tempo: input.tradeTempo,
@@ -254,8 +254,8 @@ builder.mutationField("updateBot", (t) =>
             .insertInto("bot_settings")
             .values({
               bot_id: args.id,
-              daily_max_loss:
-                input.dailyMaxLoss ?? currentSettings?.daily_max_loss ?? "0",
+              daily_max_loss_pct:
+                input.dailyMaxLoss ?? currentSettings?.daily_max_loss_pct ?? "0",
               daily_max_gain:
                 input.dailyMaxGain ?? currentSettings?.daily_max_gain ?? "0",
               risk_attitude:

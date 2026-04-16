@@ -47,7 +47,7 @@ builder.objectType("Bot", {
         const s = await ctx.loaders.botSettingsById.load(
           String(bot.current_settings_id),
         );
-        return s?.daily_max_loss ?? null;
+        return s?.daily_max_loss_pct ?? null;
       },
     }),
 
