@@ -9,6 +9,27 @@ import {
   type BotFrameName,
 } from "../../types/enums";
 
+// ---------------------------------------------------------------------------
+// BotBrainConfig — resolved from bot_brain_configs table
+// encrypted_key is NEVER exposed here; only keyPreview is surfaced
+// ---------------------------------------------------------------------------
+
+const BotBrainConfig = builder.objectRef<{
+  brainType: string;
+  modelId: string;
+  provider: string | null;
+  keyPreview: string | null;
+}>("BotBrainConfig");
+
+builder.objectType(BotBrainConfig, {
+  fields: (t) => ({
+    brainType:  t.exposeString("brainType"),
+    modelId:    t.exposeString("modelId"),
+    provider:   t.exposeString("provider",   { nullable: true }),
+    keyPreview: t.exposeString("keyPreview", { nullable: true }),
+  }),
+});
+
 builder.objectType("Bot", {
   description: "A user-configured AI trading bot",
   fields: (t) => ({
@@ -126,6 +147,26 @@ builder.objectType("Bot", {
           return proposals.filter((p) => p.status === args.status);
         }
         return proposals;
+      },
+    }),
+
+    brain: t.field({
+      type: BotBrainConfig,
+      nullable: true,
+      resolve: async (bot, _args, ctx) => {
+        const config = await ctx.db
+          .selectFrom("bot_brain_configs")
+          .select(["brain_type", "model_id", "provider", "key_preview"])
+          .where("bot_id", "=", bot.id)
+          .where("is_active", "=", true)
+          .executeTakeFirst();
+        if (!config) return null;
+        return {
+          brainType:  config.brain_type,
+          modelId:    config.model_id,
+          provider:   config.provider ?? null,
+          keyPreview: config.key_preview ?? null,
+        };
       },
     }),
 

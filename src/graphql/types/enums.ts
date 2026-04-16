@@ -1,5 +1,10 @@
 import { builder } from "../builder";
 
+// NOTE: $inferType extracts the TypeScript union type from the Pothos EnumRef —
+// i.e. 'CAUTIOUS' | 'BALANCED' | 'AGGRESSIVE'. This keeps the enum values
+// as the single source of truth: adding/removing a value here automatically
+// updates this type without any manual duplication.
+
 // Mirrors DB enum: bot_status
 // NOTE: ARCHIVED is the soft-delete state — there is no DELETED in the schema
 export const BotStatusEnum = builder.enumType("BotStatus", {
@@ -37,31 +42,55 @@ export type BotFrameName = (typeof BotFrameEnum)["$inferType"];
 export const RiskAttitudeEnum = builder.enumType("RiskAttitude", {
   values: ["CAUTIOUS", "BALANCED", "AGGRESSIVE"] as const,
 });
-// $inferType extracts the TypeScript union type from the Pothos EnumRef —
-// i.e. 'CAUTIOUS' | 'BALANCED' | 'AGGRESSIVE'. This keeps the enum values
-// as the single source of truth: adding/removing a value here automatically
-// updates this type without any manual duplication.
 export type RiskAttitude = (typeof RiskAttitudeEnum)["$inferType"];
 
 // Mirrors DB enum: trade_tempo
 export const TradeTempoEnum = builder.enumType("TradeTempo", {
   values: ["OPPORTUNISTIC", "ACTIVE", "RELENTLESS"] as const,
 });
-// See RiskAttitude above for $inferType explanation.
+// See Note at top of file for $inferType explanation.
 export type TradeTempo = (typeof TradeTempoEnum)["$inferType"];
 
 // Mirrors DB enum: combat_patience
 export const CombatPatienceEnum = builder.enumType("CombatPatience", {
   values: ["PATIENT", "CALCULATED", "STRATEGIC", "IMPULSIVE"] as const,
 });
-// See RiskAttitude above for $inferType explanation.
+// See Note at top of file for $inferType explanation.
 export type CombatPatience = (typeof CombatPatienceEnum)["$inferType"];
+
+// Exit personality names — match exit_personalities lookup table
+export const ExitPersonalityNameEnum = builder.enumType("ExitPersonalityName", {
+  values: ["QUICK_FINISHER", "BALANCED", "PATIENT"] as const,
+});
+export type ExitPersonalityName =
+  (typeof ExitPersonalityNameEnum)["$inferType"];
+
+// Stop style names — match stop_styles lookup table
+export const StopStyleNameEnum = builder.enumType("StopStyleName", {
+  values: ["HARD", "FLEXIBLE", "ADAPTIVE"] as const,
+});
+export type StopStyleName = (typeof StopStyleNameEnum)["$inferType"];
+
+// Brain type — TACHYON_HOSTED (managed) or BYOK (bring your own key)
+export const BrainTypeEnum = builder.enumType("BrainType", {
+  values: ["TACHYON_HOSTED", "BYOK"] as const,
+});
+export type BrainType = (typeof BrainTypeEnum)["$inferType"];
 
 // Mirrors DB enum: sector_filter
 export const SectorFilterEnum = builder.enumType("SectorFilter", {
-  values: ["TECH", "ENERGY", "FINANCIALS", "HEALTHCARE", "ETFS_ONLY", "MEGA_CAPS_ONLY", "LIQUID_LARGE_CAPS", "ANY"] as const,
+  values: [
+    "TECH",
+    "ENERGY",
+    "FINANCIALS",
+    "HEALTHCARE",
+    "ETFS_ONLY",
+    "MEGA_CAPS_ONLY",
+    "LIQUID_LARGE_CAPS",
+    "ANY",
+  ] as const,
 });
-// See RiskAttitude above for $inferType explanation.
+// See Note at top of file for $inferType explanation.
 export type SectorFilter = (typeof SectorFilterEnum)["$inferType"];
 
 // Mirrors DB enum: proposal_side

@@ -8,6 +8,10 @@ import {
   RiskAttitudeEnum,
   TradeTempoEnum,
   CombatPatienceEnum,
+  SectorFilterEnum,
+  ExitPersonalityNameEnum,
+  StopStyleNameEnum,
+  BrainTypeEnum,
 } from "../../types/enums";
 import { ValidationError, NotFoundError } from "../../types/errors";
 import { assertOwnership } from "../../../auth/authorization";
@@ -22,16 +26,88 @@ import type {
 // Input types
 // ---------------------------------------------------------------------------
 
+const MarketAwarenessInput = builder.inputType("MarketAwarenessInput", {
+  fields: (t) => ({
+    momentum:       t.float({ required: true }),
+    meanReversion:  t.float({ required: true }),
+    volatility:     t.float({ required: true }),
+    trendFollowing: t.float({ required: true }),
+  }),
+});
+
+const EmotionalControlsInput = builder.inputType("EmotionalControlsInput", {
+  fields: (t) => ({
+    freezeAfterLosses:          t.int({ required: false }),  // null = disabled; 1–5
+    cooldownAfterVolatility:    t.boolean({ required: true }),
+    standDownAfterNoonIfLosing: t.boolean({ required: true }),
+  }),
+});
+
+const RulesOfEngagementInput = builder.inputType("RulesOfEngagementInput", {
+  fields: (t) => ({
+    overnightHoldAllowed:        t.boolean({ required: true }),
+    noSameDayExitUnlessStopLoss: t.boolean({ required: true }),
+    // oneTradeAtATime is always true in MVP — NOT accepted as input
+  }),
+});
+
+const BrainConfigInput = builder.inputType("BrainConfigInput", {
+  fields: (t) => ({
+    brainType: t.field({ type: BrainTypeEnum, required: true }),
+    modelId:   t.string({ required: true }),
+    provider:  t.string({ required: false }),  // required if brainType == BYOK
+    apiKey:    t.string({ required: false }),   // required if brainType == BYOK; encrypted before storage
+  }),
+});
+
+const ExitPersonalityInput = builder.inputType("ExitPersonalityInput", {
+  fields: (t) => ({
+    name: t.field({ type: ExitPersonalityNameEnum, required: true }),
+  }),
+});
+
+const StopLossStyleInput = builder.inputType("StopLossStyleInput", {
+  fields: (t) => ({
+    name: t.field({ type: StopStyleNameEnum, required: true }),
+  }),
+});
+
 const CreateBotInput = builder.inputType("CreateBotInput", {
   fields: (t) => ({
-    name: t.string({ required: true }),
+    // Frame & Identity
+    name:      t.string({ required: true }),  // max 24 chars
     frameName: t.field({ type: BotFrameEnum, required: true }),
-    allocationPct: t.field({ type: "Decimal", required: true }),
-    dailyMaxLoss: t.field({ type: "Decimal", required: true }),
-    dailyMaxGain: t.field({ type: "Decimal", required: true }),
-    riskAttitude: t.field({ type: RiskAttitudeEnum, required: true }),
-    tradeTempo: t.field({ type: TradeTempoEnum, required: true }),
+    avatarId:  t.id({ required: true }),
+    colorway:  t.string({ required: true }),  // hex string e.g. "#2C6BED"
+
+    // Core trading parameters
+    allocationPct:  t.field({ type: "Decimal", required: true }),  // 0.01 – 1.00
+    riskAttitude:   t.field({ type: RiskAttitudeEnum, required: true }),
+    tradeTempo:     t.field({ type: TradeTempoEnum, required: true }),
     combatPatience: t.field({ type: CombatPatienceEnum, required: true }),
+
+    // Market awareness (4 scores 0.0–1.0)
+    marketAwareness: t.field({ type: MarketAwarenessInput, required: true }),
+
+    // Sector & target preferences
+    sectors: t.field({ type: [SectorFilterEnum], required: true }),  // min 1 item
+
+    // Exit behavior
+    exitPersonality: t.field({ type: ExitPersonalityInput, required: true }),
+    stopLossStyle:   t.field({ type: StopLossStyleInput, required: true }),
+
+    // Safety systems
+    dailyMaxLossPct: t.field({ type: "Decimal", required: true }),  // per-frame bounds enforced in resolver
+    dailyMaxGain:    t.field({ type: "Decimal", required: false }), // optional (USD)
+
+    // Emotional controls
+    emotionalControls: t.field({ type: EmotionalControlsInput, required: true }),
+
+    // Rules of engagement
+    rulesOfEngagement: t.field({ type: RulesOfEngagementInput, required: true }),
+
+    // Brain selection
+    brain: t.field({ type: BrainConfigInput, required: true }),
   }),
 });
 
@@ -103,10 +179,10 @@ builder.mutationField("createBot", (t) =>
         };
       }
 
-      if (parseFloat(input.dailyMaxLoss) <= 0) {
+      if (parseFloat(input.dailyMaxLossPct) <= 0) {
         return {
           message: "Daily max loss must be greater than 0",
-          field: "dailyMaxLoss",
+          field: "dailyMaxLossPct",
           code: "INVALID_VALUE",
         };
       }
@@ -164,8 +240,8 @@ builder.mutationField("createBot", (t) =>
           .insertInto("bot_settings")
           .values({
             bot_id: newBot.id,
-            daily_max_loss_pct: input.dailyMaxLoss,
-            daily_max_gain: input.dailyMaxGain,
+            daily_max_loss_pct: input.dailyMaxLossPct,
+            daily_max_gain: input.dailyMaxGain ?? "0",
             risk_attitude: input.riskAttitude,
             trade_tempo: input.tradeTempo,
             combat_patience: input.combatPatience,
@@ -255,7 +331,7 @@ builder.mutationField("updateBot", (t) =>
             .values({
               bot_id: args.id,
               daily_max_loss_pct:
-                input.dailyMaxLoss ?? currentSettings?.daily_max_loss_pct ?? "0",
+                input.dailyMaxLoss ?? currentSettings?.daily_max_loss_pct?.toString() ?? "0",
               daily_max_gain:
                 input.dailyMaxGain ?? currentSettings?.daily_max_gain ?? "0",
               risk_attitude:
