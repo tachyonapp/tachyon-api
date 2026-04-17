@@ -643,7 +643,6 @@ describe("POST /graphql — createBot mutations", () => {
     expect(res.body.errors).toBeUndefined();
 
     const bot = res.body.data.createBot;
-    console.log(bot, "ass");
     expect(bot.status).toBe("ACTIVE");
     expect(bot.name).toBe("RageBerserker");
     expect(bot.allocationPct).toBe("0.15");
