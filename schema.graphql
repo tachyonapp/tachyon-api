@@ -30,6 +30,7 @@ interface BaseError {
 type Bot {
   activePosition: Position
   allocationPct: Decimal
+  brain: BotBrainConfig
   combatPatience: CombatPatience
   createdAt: DateTime
   dailyMaxGain: Decimal
@@ -43,6 +44,13 @@ type Bot {
   status: BotStatus
   tradeTempo: TradeTempo
   updatedAt: DateTime
+}
+
+type BotBrainConfig {
+  brainType: String
+  keyPreview: String
+  modelId: String
+  provider: String
 }
 
 enum BotFrame {
@@ -63,6 +71,18 @@ enum BotStatus {
   PAUSED
 }
 
+input BrainConfigInput {
+  apiKey: String
+  brainType: BrainType!
+  modelId: String!
+  provider: String
+}
+
+enum BrainType {
+  BYOK
+  TACHYON_HOSTED
+}
+
 enum BrokerConnStatus {
   ACTIVE
   ERROR
@@ -80,12 +100,21 @@ union ConnectBrokerResult = Account | ValidationError
 
 input CreateBotInput {
   allocationPct: Decimal!
+  avatarId: ID!
+  brain: BrainConfigInput!
+  colorway: String!
   combatPatience: CombatPatience!
-  dailyMaxGain: Decimal!
-  dailyMaxLoss: Decimal!
+  dailyMaxGain: Decimal
+  dailyMaxLossPct: Decimal!
+  emotionalControls: EmotionalControlsInput!
+  exitPersonality: ExitPersonalityInput!
   frameName: BotFrame!
+  marketAwareness: MarketAwarenessInput!
   name: String!
   riskAttitude: RiskAttitude!
+  rulesOfEngagement: RulesOfEngagementInput!
+  sectors: [SectorFilter!]!
+  stopLossStyle: StopLossStyleInput!
   tradeTempo: TradeTempo!
 }
 
@@ -94,6 +123,29 @@ union CreateBotResult = Bot | ValidationError
 scalar DateTime
 
 scalar Decimal
+
+input EmotionalControlsInput {
+  cooldownAfterVolatility: Boolean!
+  freezeAfterLosses: Int
+  standDownAfterNoonIfLosing: Boolean!
+}
+
+input ExitPersonalityInput {
+  name: ExitPersonalityName!
+}
+
+enum ExitPersonalityName {
+  BALANCED
+  PATIENT
+  QUICK_FINISHER
+}
+
+input MarketAwarenessInput {
+  meanReversion: Float!
+  momentum: Float!
+  trendFollowing: Float!
+  volatility: Float!
+}
 
 type Mutation {
   activateBot(id: ID!): BotResult
@@ -184,7 +236,33 @@ enum RiskAttitude {
   CAUTIOUS
 }
 
+input RulesOfEngagementInput {
+  noSameDayExitUnlessStopLoss: Boolean!
+  overnightHoldAllowed: Boolean!
+}
+
+enum SectorFilter {
+  ANY
+  ENERGY
+  ETFS_ONLY
+  FINANCIALS
+  HEALTHCARE
+  LIQUID_LARGE_CAPS
+  MEGA_CAPS_ONLY
+  TECH
+}
+
 union SkipProposalResult = AuthError | NotFoundError | Proposal
+
+input StopLossStyleInput {
+  name: StopStyleName!
+}
+
+enum StopStyleName {
+  ADAPTIVE
+  FLEXIBLE
+  HARD
+}
 
 type Subscription {
   orderUpdated(botId: ID!): Position
