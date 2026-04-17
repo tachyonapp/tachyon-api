@@ -71,10 +71,26 @@ enum BotStatus {
   PAUSED
 }
 
+type BrainCatalog {
+  byokProviders: [BrainProviderOption!]
+  defaultBrain: DefaultBrainInfo
+}
+
 input BrainConfigInput {
   apiKey: String
   brainType: BrainType!
   modelId: String!
+  provider: String
+}
+
+type BrainModelOption {
+  displayName: String
+  modelId: String
+}
+
+type BrainProviderOption {
+  displayName: String
+  models: [BrainModelOption!]
   provider: String
 }
 
@@ -123,6 +139,14 @@ union CreateBotResult = Bot | ValidationError
 scalar DateTime
 
 scalar Decimal
+
+type DefaultBrainInfo {
+  brainType: String
+  description: String
+  displayName: String
+  modelId: String
+  provider: String
+}
 
 input EmotionalControlsInput {
   cooldownAfterVolatility: Boolean!
@@ -225,6 +249,7 @@ type Query {
   balance: Balance
   bot(id: ID!): Bot
   bots: [Bot!]
+  brainProviders: BrainCatalog
   me: User
   positions: [Position!]
   proposals(status: ProposalStatus): [Proposal!]
