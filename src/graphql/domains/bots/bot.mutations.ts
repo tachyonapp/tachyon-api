@@ -167,6 +167,12 @@ const BotResult = builder.unionType("BotResult", {
 
 // ---------------------------------------------------------------------------
 // createBot
+//
+// NOTE:: JSONB columns — pg has no special handling. When you pass a plain
+// JS object or array, the driver calls .toString() on it, which produces
+// [object Object] or TECH (comma-joined). Postgres then tries to parse that
+// string as JSON and fails with invalid input syntax for type json. Hence
+// the use of JSON.stringify() for certain bot settings.
 // ---------------------------------------------------------------------------
 
 builder.mutationField("createBot", (t) =>
@@ -190,7 +196,7 @@ builder.mutationField("createBot", (t) =>
         return {
           message: "Bot name must be 24 characters or fewer",
           field: "name",
-          code: "NAME_TOO_LONG",
+          code: "TOO_LONG",
         };
       }
 
@@ -531,29 +537,29 @@ builder.mutationField("createBot", (t) =>
             stop_style_id: stopStyle.id,
             daily_max_loss_pct: input.dailyMaxLossPct,
             daily_max_gain: input.dailyMaxGain ?? "0",
-            emotional_controls: {
+            emotional_controls: JSON.stringify({
               freezeAfterLosses:
                 input.emotionalControls.freezeAfterLosses ?? null,
               cooldownAfterVolatility:
                 input.emotionalControls.cooldownAfterVolatility,
               standDownAfterNoonIfLosing:
                 input.emotionalControls.standDownAfterNoonIfLosing,
-            },
-            rules_of_engagement: {
+            }),
+            rules_of_engagement: JSON.stringify({
               oneTradeAtATime: true,
               overnightHoldAllowed:
                 input.rulesOfEngagement.overnightHoldAllowed,
               noSameDayExitUnlessStopLoss:
                 input.rulesOfEngagement.noSameDayExitUnlessStopLoss,
-            },
-            market_awareness: {
+            }),
+            market_awareness: JSON.stringify({
               momentum: input.marketAwareness.momentum,
               meanReversion: input.marketAwareness.meanReversion,
               volatility: input.marketAwareness.volatility,
               trendFollowing: input.marketAwareness.trendFollowing,
-            },
+            }),
             sectors: input.sectors,
-            asset_types: ["STOCK", "ETF"],
+            asset_types: JSON.stringify(["STOCK", "ETF"]),
           })
           .returning("id")
           .executeTakeFirstOrThrow();

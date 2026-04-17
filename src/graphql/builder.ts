@@ -2,6 +2,7 @@ import SchemaBuilder from "@pothos/core";
 import ErrorsPlugin from "@pothos/plugin-errors";
 import ScopeAuthPlugin from "@pothos/plugin-scope-auth";
 import SimpleObjectsPlugin from "@pothos/plugin-simple-objects";
+import { GraphQLError } from "graphql";
 import type { TachyonContext } from "../context";
 import type {
   UsersRow,
@@ -53,6 +54,12 @@ export const builder = new SchemaBuilder<{
     authScopes: async (context) => ({
       authenticated: context.auth !== null,
     }),
+    unauthorizedError: (_parent, context) =>
+      new GraphQLError("Not authorized", {
+        extensions: {
+          code: context.auth === null ? "UNAUTHENTICATED" : "FORBIDDEN",
+        },
+      }),
   },
   errors: {
     defaultTypes: [],

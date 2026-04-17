@@ -55,7 +55,7 @@ builder.objectType("Bot", {
     // allocation_pct is on the bots table directly
     allocationPct: t.field({
       type: "Decimal",
-      resolve: (bot) => bot.allocation_pct.toString(),
+      resolve: (bot) => parseFloat(bot.allocation_pct.toString()).toString(),
     }),
 
     // Settings fields live in bot_settings, resolved via DataLoader.
