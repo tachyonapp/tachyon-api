@@ -10,7 +10,7 @@
     "test": "jest --detectOpenHandles",
     "lint": "eslint src/",
     "schema:export": "ts-node --project tsconfig.json scripts/export-schema.ts",
-    "test:integration": "jest --detectOpenHandles --testPathPattern=graphql.integration"
+    "test:integration": "INTEGRATION_TESTS=true jest --detectOpenHandles --forceExit --testPathPattern=graphql.integration"
   },
   "dependencies": {
     "@apollo/server": "^4.13.0",
