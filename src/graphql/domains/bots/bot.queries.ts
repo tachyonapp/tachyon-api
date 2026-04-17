@@ -1,5 +1,34 @@
 import { builder } from "../../builder";
 import { assertOwnership } from "../../../auth/authorization";
+import {
+  TACHYON_DEFAULT_BRAIN,
+  BYOK_PROVIDER_CATALOG,
+} from "../../../config/brainProviders";
+import { BrainCatalog } from "./bot.type";
+
+// Public catalog — no auth required; mobile fetches this at wizard entry
+builder.queryField("brainProviders", (t) =>
+  t.field({
+    type: BrainCatalog,
+    resolve: () => ({
+      defaultBrain: {
+        brainType: TACHYON_DEFAULT_BRAIN.brainType,
+        modelId: TACHYON_DEFAULT_BRAIN.modelId,
+        provider: TACHYON_DEFAULT_BRAIN.provider,
+        displayName: TACHYON_DEFAULT_BRAIN.displayName,
+        description: TACHYON_DEFAULT_BRAIN.description,
+      },
+      byokProviders: BYOK_PROVIDER_CATALOG.map((p) => ({
+        provider: p.provider,
+        displayName: p.displayName,
+        models: p.models.map((m) => ({
+          modelId: m.modelId,
+          displayName: m.displayName,
+        })),
+      })),
+    }),
+  }),
+);
 
 // List all non-archived bots for the authenticated user
 builder.queryField("bots", (t) =>

@@ -181,3 +181,40 @@ builder.objectType("Bot", {
     }),
   }),
 });
+
+// ---------------------------------------------------------------------------
+// Brain catalog types — returned by the brainProviders query.
+// These are plain data shapes with no DB backing; SimpleObjectsPlugin handles them.
+// ---------------------------------------------------------------------------
+
+export const BrainModelOption = builder.simpleObject("BrainModelOption", {
+  fields: (t) => ({
+    modelId: t.string(),
+    displayName: t.string(),
+  }),
+});
+
+export const BrainProviderOption = builder.simpleObject("BrainProviderOption", {
+  fields: (t) => ({
+    provider: t.string(),
+    displayName: t.string(),
+    models: t.field({ type: [BrainModelOption] }),
+  }),
+});
+
+export const DefaultBrainInfo = builder.simpleObject("DefaultBrainInfo", {
+  fields: (t) => ({
+    brainType: t.string(),
+    modelId: t.string(),
+    provider: t.string(),
+    displayName: t.string(),
+    description: t.string(),
+  }),
+});
+
+export const BrainCatalog = builder.simpleObject("BrainCatalog", {
+  fields: (t) => ({
+    defaultBrain: t.field({ type: DefaultBrainInfo }),
+    byokProviders: t.field({ type: [BrainProviderOption] }),
+  }),
+});

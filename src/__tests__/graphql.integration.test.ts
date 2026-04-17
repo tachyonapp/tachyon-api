@@ -366,6 +366,22 @@ describe("POST /graphql — createBot mutations", () => {
     const valkey = getValkey();
     const keys = await valkey.keys("rate:op:*");
     if (keys.length > 0) await valkey.del(...keys);
+
+    // Delete bots for all test users to prevent allocation accumulating across runs.
+    // Cascade handles bot_settings, bot_brain_configs, etc.
+    const { getDb } = await import("../lib/db");
+    const db = getDb();
+    await db
+      .deleteFrom("bots")
+      .where(
+        "user_id",
+        "in",
+        db
+          .selectFrom("users")
+          .select("id")
+          .where("email", "like", "%@test.com"),
+      )
+      .execute();
   });
 
   it("happy path: creates TACHYON_HOSTED bot and returns ACTIVE status", async () => {
