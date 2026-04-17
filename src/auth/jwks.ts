@@ -10,10 +10,22 @@ const JWKS_CACHE_TTL_MS =
  *
  * `createRemoteJWKSet` automatically fetches a new key when a token presents an unknown `kid` —
  * no service restart needed on Clerk key rotation.
+ *
+ * Lazy-initialized so module load does not throw when CLERK_JWKS_URL is absent
+ * (e.g. during jest.requireActual in test mocks or schema export scripts).
  */
-const JWKS = createRemoteJWKSet(new URL(process.env.CLERK_JWKS_URL!), {
-  cacheMaxAge: JWKS_CACHE_TTL_MS,
-});
+let _jwks: ReturnType<typeof createRemoteJWKSet> | null = null;
+
+function getJwks(): ReturnType<typeof createRemoteJWKSet> {
+  if (!_jwks) {
+    const url = process.env.CLERK_JWKS_URL;
+    if (!url) throw new Error("CLERK_JWKS_URL is not set");
+    _jwks = createRemoteJWKSet(new URL(url), {
+      cacheMaxAge: JWKS_CACHE_TTL_MS,
+    });
+  }
+  return _jwks;
+}
 
 export interface VerifiedClaims {
   sub: string; // Clerk format: "user_xxx"
@@ -25,7 +37,7 @@ export interface VerifiedClaims {
 }
 
 export async function verifyToken(token: string): Promise<VerifiedClaims> {
-  const { payload } = await jwtVerify(token, JWKS, {
+  const { payload } = await jwtVerify(token, getJwks(), {
     issuer: process.env.CLERK_ISSUER,
     // No audience claim — Clerk JWTs do not include aud by default.
     // If a JWT template with an audience is configured later, add it here.
