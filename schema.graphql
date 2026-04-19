@@ -183,6 +183,7 @@ type Mutation {
   pauseBot(id: ID!): BotResult
   skipProposal(id: ID!): SkipProposalResult
   updateBot(id: ID!, input: UpdateBotInput!): UpdateBotResult
+  validateBrainKey(apiKey: String!, provider: String!): ValidateBrainKeyResult
 }
 
 type NotFoundError implements BaseError {
@@ -321,6 +322,11 @@ type User {
 
   """Whether the user has completed the FTUE onboarding flow."""
   onboardingCompleted: Boolean!
+}
+
+type ValidateBrainKeyResult {
+  error: String
+  valid: Boolean
 }
 
 type ValidationError implements BaseError {
