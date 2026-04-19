@@ -1,3 +1,5 @@
+// TODO: This file is duplicated in tachyon-mobile/constants/frameConfig.ts.
+// Extract to a shared @tachyon/frame-config package when the project warrants it.
 import type {
   RiskAttitude,
   TradeTempo,

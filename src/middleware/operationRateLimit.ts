@@ -11,6 +11,7 @@ export const OP_RATE_LIMITS: Record<
   approveProposal: { limit: 10, windowSeconds: 60 },
   skipProposal: { limit: 20, windowSeconds: 60 },
   createBot: { limit: 5, windowSeconds: 3600 },
+  validateBrainKey: { limit: 5, windowSeconds: 60 },
   activateBot: { limit: 10, windowSeconds: 60 },
   pauseBot: { limit: 10, windowSeconds: 60 },
   connectBroker: { limit: 3, windowSeconds: 3600 },

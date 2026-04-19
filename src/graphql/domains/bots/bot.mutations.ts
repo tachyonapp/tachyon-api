@@ -29,6 +29,7 @@ import {
   type ByokProvider,
 } from "../../../config/allowedSectors";
 import { FRAME_CONFIG } from "../../../config/frameConfig";
+import { ValidateBrainKeyResult } from "./bot.type";
 
 // ---------------------------------------------------------------------------
 // Input types
@@ -896,6 +897,79 @@ builder.mutationField("deleteBot", (t) =>
       }
 
       return updated;
+    },
+  }),
+);
+
+// ---------------------------------------------------------------------------
+// validateBrainKey
+//
+// Proxies the API key validation to the provider server-side so the mobile
+// client never embeds provider-specific validation logic. The key is NOT
+// stored — only the validation result is returned.
+// ---------------------------------------------------------------------------
+
+function providerValidationErrorMessage(body: unknown): string | undefined {
+  if (typeof body !== "object" || body === null) return undefined;
+  if (!("error" in body)) return undefined;
+  const error = body.error;
+  if (typeof error !== "object" || error === null) return undefined;
+  if (!("message" in error)) return undefined;
+  const message = error.message;
+  return typeof message === "string" ? message : undefined;
+}
+
+builder.mutationField("validateBrainKey", (t) =>
+  t.field({
+    type: ValidateBrainKeyResult,
+    args: {
+      provider: t.arg.string({ required: true }),
+      apiKey: t.arg.string({ required: true }),
+    },
+    authScopes: { authenticated: true },
+    resolve: async (_root, args, ctx) => {
+      await withOpRateLimit(
+        ctx,
+        "validateBrainKey",
+        OP_RATE_LIMITS.validateBrainKey.limit,
+        OP_RATE_LIMITS.validateBrainKey.windowSeconds,
+      );
+
+      const provider = args.provider as ByokProvider;
+
+      if (!ALLOWED_BYOK_PROVIDERS.includes(provider)) {
+        return {
+          valid: false,
+          error: `Unsupported provider: ${args.provider}`,
+        };
+      }
+
+      const endpoint = BYOK_PROVIDER_VALIDATION_ENDPOINTS[provider];
+
+      try {
+        const headers: Record<string, string> =
+          provider === "anthropic"
+            ? { "x-api-key": args.apiKey, "anthropic-version": "2023-06-01" }
+            : { Authorization: `Bearer ${args.apiKey}` };
+
+        const res = await fetch(endpoint, { method: "GET", headers });
+
+        if (res.ok) {
+          return { valid: true, error: null };
+        }
+
+        const body: unknown = await res.json().catch(() => ({}));
+        const message =
+          providerValidationErrorMessage(body) ??
+          `Provider returned ${res.status}`;
+
+        return { valid: false, error: message };
+      } catch {
+        return {
+          valid: false,
+          error: "Could not reach provider. Check your network and try again.",
+        };
+      }
     },
   }),
 );
