@@ -218,3 +218,13 @@ export const BrainCatalog = builder.simpleObject("BrainCatalog", {
     byokProviders: t.field({ type: [BrainProviderOption] }),
   }),
 });
+
+export const ValidateBrainKeyResult = builder.simpleObject(
+  "ValidateBrainKeyResult",
+  {
+    fields: (t) => ({
+      valid: t.boolean(),
+      error: t.string({ nullable: true }),
+    }),
+  },
+);
