@@ -10,6 +10,7 @@ const SAFE_CODES = new Set([
   "GRAPHQL_VALIDATION_FAILED",
   "BAD_USER_INPUT",
   "PERSISTED_QUERY_NOT_FOUND",
+  "RATE_LIMITED",
 ]);
 
 export function formatError(
