@@ -8,7 +8,7 @@ import { builder } from "../builder";
 // Mirrors DB enum: bot_status
 // NOTE: ARCHIVED is the soft-delete state — there is no DELETED in the schema
 export const BotStatusEnum = builder.enumType("BotStatus", {
-  values: ["DRAFT", "ACTIVE", "PAUSED", "ARCHIVED"] as const,
+  values: ["DRAFT", "ACTIVE", "PAUSED", "ARCHIVED", "STOOD_DOWN"] as const,
 });
 
 // Mirrors DB enum: proposal_status
