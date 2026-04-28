@@ -11,6 +11,7 @@ const SAFE_CODES = new Set([
   "BAD_USER_INPUT",
   "PERSISTED_QUERY_NOT_FOUND",
   "RATE_LIMITED",
+  "BOT_STOOD_DOWN",
 ]);
 
 export function formatError(
