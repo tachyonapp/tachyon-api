@@ -170,6 +170,59 @@ builder.objectType("Bot", {
       },
     }),
 
+    botBrainConfig: t.field({
+      type: BotBrainConfig,
+      nullable: true,
+      resolve: async (bot, _args, ctx) => {
+        const config = await ctx.loaders.botBrainConfigByBotId.load(
+          String(bot.id),
+        );
+        if (!config) return null;
+        return {
+          brainType:  config.brain_type,
+          modelId:    config.model_id,
+          provider:   config.provider ?? null,
+          keyPreview: config.key_preview ?? null,
+        };
+      },
+    }),
+
+    scanCapUsed: t.int({
+      nullable: true,
+      resolve: async (bot, _args, ctx) => {
+        const runtime = await ctx.db
+          .selectFrom("bot_runtime_data")
+          .where("bot_id", "=", bot.id)
+          .select("ai_calls_today")
+          .executeTakeFirst();
+        return runtime?.ai_calls_today ?? 0;
+      },
+    }),
+
+    scanCapRemaining: t.int({
+      nullable: true,
+      resolve: async (bot, _args, ctx) => {
+        const [runtime, sub] = await Promise.all([
+          ctx.db
+            .selectFrom("bot_runtime_data")
+            .where("bot_id", "=", bot.id)
+            .select("ai_calls_today")
+            .executeTakeFirst(),
+          ctx.db
+            .selectFrom("user_subscriptions")
+            .where("user_id", "=", bot.user_id)
+            .select("tier")
+            .executeTakeFirst(),
+        ]);
+
+        if (!sub) return null;
+        const used = runtime?.ai_calls_today ?? 0;
+        if (sub.tier === "FREE_TRIAL") return Math.max(0, 40 - used);
+        if (sub.tier === "TACHYON_HOSTED") return Math.max(0, 78 - used);
+        return null; // BYOK — no cap
+      },
+    }),
+
     createdAt: t.field({
       type: "DateTime",
       resolve: (bot) => new Date(bot.created_at),

@@ -26,7 +26,13 @@ import type {
   BotSettingsRow,
   ProposalsRow,
   PositionsRow,
+  BotBrainConfigsRow,
 } from "@tachyonapp/tachyon-db";
+
+type BotBrainConfigPartial = Pick<
+  BotBrainConfigsRow,
+  "bot_id" | "brain_type" | "model_id" | "provider" | "key_preview"
+>;
 
 export interface DataLoaders {
   userById: DataLoader<string, UsersRow | null>;
@@ -35,6 +41,7 @@ export interface DataLoaders {
   botFrameById: DataLoader<string, { id: string; name: string } | null>;
   proposalsByBotId: DataLoader<string, ProposalsRow[]>;
   positionByBotId: DataLoader<string, PositionsRow | null>;
+  botBrainConfigByBotId: DataLoader<string, BotBrainConfigPartial | null>;
 }
 
 /**
@@ -82,22 +89,44 @@ export function createDataLoaders(db: Kysely<DB>): DataLoaders {
       },
     ),
 
+    // Key: bot_id
+    // Bot brain configs
+    botBrainConfigByBotId: new DataLoader<string, BotBrainConfigPartial | null>(
+      async (botIds) => {
+        const rows = await db
+          .selectFrom("bot_brain_configs")
+          .where("bot_id", "in", botIds as string[])
+          .where("is_active", "=", true)
+          .select([
+            "bot_id",
+            "brain_type",
+            "model_id",
+            "provider",
+            "key_preview",
+          ])
+          // NEVER select encrypted_key
+          .execute();
+
+        const map = new Map(rows.map((r) => [String(r.bot_id), r]));
+        return botIds.map((id) => map.get(id) ?? null);
+      },
+    ),
+
     // Key: bot_frames.id (i.e. bots.frame_id)
     // Only name is needed by the frame field resolver — select minimally.
-    botFrameById: new DataLoader<
-      string,
-      { id: string; name: string } | null
-    >(async (ids) => {
-      const frames = await db
-        .selectFrom("bot_frames")
-        .select(["id", "name"])
-        .where("id", "in", ids as string[])
-        .execute();
-      const map = new Map(
-        frames.map((f) => [String(f.id), { id: String(f.id), name: f.name }]),
-      );
-      return ids.map((id) => map.get(id) ?? null);
-    }),
+    botFrameById: new DataLoader<string, { id: string; name: string } | null>(
+      async (ids) => {
+        const frames = await db
+          .selectFrom("bot_frames")
+          .select(["id", "name"])
+          .where("id", "in", ids as string[])
+          .execute();
+        const map = new Map(
+          frames.map((f) => [String(f.id), { id: String(f.id), name: f.name }]),
+        );
+        return ids.map((id) => map.get(id) ?? null);
+      },
+    ),
 
     // Table is trade_proposals — not proposals
     proposalsByBotId: new DataLoader<string, ProposalsRow[]>(async (botIds) => {
