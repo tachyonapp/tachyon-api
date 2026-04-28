@@ -126,18 +126,6 @@ const CreateBotInput = builder.inputType("CreateBotInput", {
   }),
 });
 
-const UpdateBotInput = builder.inputType("UpdateBotInput", {
-  fields: (t) => ({
-    name: t.string({ required: false }),
-    allocationPct: t.field({ type: "Decimal", required: false }),
-    dailyMaxLoss: t.field({ type: "Decimal", required: false }),
-    dailyMaxGain: t.field({ type: "Decimal", required: false }),
-    riskAttitude: t.field({ type: RiskAttitudeEnum, required: false }),
-    tradeTempo: t.field({ type: TradeTempoEnum, required: false }),
-    combatPatience: t.field({ type: CombatPatienceEnum, required: false }),
-  }),
-});
-
 // ---------------------------------------------------------------------------
 // Result union types
 // Bot is backed by BotsRow — discriminate on `frame_id` (always present on a bot row)
@@ -146,15 +134,6 @@ const UpdateBotInput = builder.inputType("UpdateBotInput", {
 const CreateBotResult = builder.unionType("CreateBotResult", {
   types: ["Bot", ValidationError],
   resolveType: (value) => ("frame_id" in value ? "Bot" : ValidationError),
-});
-
-const UpdateBotResult = builder.unionType("UpdateBotResult", {
-  types: ["Bot", ValidationError, NotFoundError],
-  resolveType: (value) => {
-    if ("frame_id" in value) return "Bot";
-    if ("field" in value) return ValidationError;
-    return NotFoundError;
-  },
 });
 
 const BotResult = builder.unionType("BotResult", {
@@ -618,119 +597,6 @@ builder.mutationField("createBot", (t) =>
         .selectFrom("bots")
         .selectAll()
         .where("id", "=", botId)
-        .executeTakeFirstOrThrow();
-    },
-  }),
-);
-
-// ---------------------------------------------------------------------------
-// updateBot
-// ---------------------------------------------------------------------------
-
-builder.mutationField("updateBot", (t) =>
-  t.field({
-    type: UpdateBotResult,
-    args: {
-      id: t.arg.id({ required: true }),
-      input: t.arg({ type: UpdateBotInput, required: true }),
-    },
-    authScopes: { authenticated: true },
-    resolve: async (_root, args, ctx) => {
-      const existing = await ctx.db
-        .selectFrom("bots")
-        .selectAll()
-        .where("id", "=", args.id)
-        .where("status", "!=", "ARCHIVED")
-        .executeTakeFirst();
-
-      if (!existing) {
-        return { message: "Bot not found" };
-      }
-
-      assertOwnership(ctx, String(existing.user_id));
-
-      const { input } = args;
-      const hasSettingsUpdate =
-        input.dailyMaxLoss != null ||
-        input.dailyMaxGain != null ||
-        input.riskAttitude != null ||
-        input.tradeTempo != null ||
-        input.combatPatience != null ||
-        input.allocationPct != null;
-
-      await ctx.db.transaction().execute(async (trx) => {
-        if (input.name != null) {
-          await trx
-            .updateTable("bots")
-            .set({ name: input.name })
-            .where("id", "=", args.id)
-            .execute();
-        }
-
-        if (hasSettingsUpdate) {
-          // Fetch current settings to carry forward unchanged fields
-          const currentSettings = existing.current_settings_id
-            ? await trx
-                .selectFrom("bot_settings")
-                .selectAll()
-                .where("id", "=", existing.current_settings_id)
-                .executeTakeFirstOrThrow()
-            : null;
-
-          // Create a new bot_settings row — preserves version history
-          // (bot_settings.effective_from tracks when each version took effect)
-          const newSettings = await trx
-            .insertInto("bot_settings")
-            .values({
-              bot_id: args.id,
-              daily_max_loss_pct:
-                input.dailyMaxLoss ??
-                currentSettings?.daily_max_loss_pct?.toString() ??
-                "0",
-              daily_max_gain:
-                input.dailyMaxGain ?? currentSettings?.daily_max_gain ?? "0",
-              risk_attitude:
-                input.riskAttitude ??
-                currentSettings?.risk_attitude ??
-                "BALANCED",
-              trade_tempo:
-                input.tradeTempo ??
-                currentSettings?.trade_tempo ??
-                "OPPORTUNISTIC",
-              combat_patience:
-                input.combatPatience ??
-                currentSettings?.combat_patience ??
-                "PATIENT",
-              exit_personality_id: currentSettings?.exit_personality_id ?? "1",
-              stop_style_id: currentSettings?.stop_style_id ?? "1",
-            })
-            .returning("id")
-            .executeTakeFirstOrThrow();
-
-          if (input.allocationPct != null) {
-            await trx
-              .updateTable("bots")
-              .set({
-                current_settings_id: newSettings.id,
-                allocation_pct: input.allocationPct,
-              })
-              .where("id", "=", args.id)
-              .execute();
-          } else {
-            await trx
-              .updateTable("bots")
-              .set({ current_settings_id: newSettings.id })
-              .where("id", "=", args.id)
-              .execute();
-          }
-        }
-      });
-
-      // Re-fetch after transaction to get final state
-      return ctx.db
-        .selectFrom("bots")
-        .selectAll()
-        .where("id", "=", args.id)
         .executeTakeFirstOrThrow();
     },
   }),
