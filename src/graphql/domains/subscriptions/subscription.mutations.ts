@@ -189,3 +189,69 @@ builder.mutationField("selectTier", (t) =>
     },
   }),
 );
+
+// ---------------------------------------------------------------------------
+// cancelSubscription
+// ---------------------------------------------------------------------------
+
+const CancelSubscriptionResult = builder.simpleObject(
+  "CancelSubscriptionResult",
+  {
+    fields: (t) => ({
+      success: t.boolean(),
+    }),
+  },
+);
+
+builder.mutationField("cancelSubscription", (t) =>
+  t.field({
+    type: CancelSubscriptionResult,
+    authScopes: { authenticated: true },
+    resolve: async (_root, _args, ctx) => {
+      await withOpRateLimit(
+        ctx,
+        "cancelSubscription",
+        OP_RATE_LIMITS.cancelSubscription.limit,
+        OP_RATE_LIMITS.cancelSubscription.windowSeconds,
+      );
+
+      const userId = ctx.auth!.userId;
+      const db = getDb();
+
+      const sub = await db
+        .selectFrom("user_subscriptions")
+        .where("user_id", "=", userId)
+        .select(["id", "stripe_subscription_id"])
+        .executeTakeFirst();
+
+      if (!sub) {
+        throw new GraphQLError("No active subscription found", {
+          extensions: { code: "NOT_FOUND" },
+        });
+      }
+
+      // Cancel at Stripe for paid tiers; no-op for FREE_TRIAL (no stripe_subscription_id)
+      if (sub.stripe_subscription_id) {
+        await stripe.subscriptions.cancel(sub.stripe_subscription_id);
+      }
+
+      // Atomic: mark cancelled + pause all ACTIVE bots
+      await db.transaction().execute(async (trx) => {
+        await trx
+          .updateTable("user_subscriptions")
+          .set({ subscription_status: "cancelled", updated_at: new Date() })
+          .where("id", "=", sub.id)
+          .execute();
+
+        await trx
+          .updateTable("bots")
+          .set({ status: "PAUSED", updated_at: new Date() })
+          .where("user_id", "=", userId)
+          .where("status", "=", "ACTIVE")
+          .execute();
+      });
+
+      return { success: true };
+    },
+  }),
+);

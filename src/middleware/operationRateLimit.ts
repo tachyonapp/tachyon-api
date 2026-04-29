@@ -18,6 +18,7 @@ export const OP_RATE_LIMITS: Record<
   botPerformance: { limit: 20, windowSeconds: 60 },
   updateBotIdentity: { limit: 10, windowSeconds: 60 },
   selectTier: { limit: 3, windowSeconds: 3600 },
+  cancelSubscription: { limit: 3, windowSeconds: 3600 },
 };
 
 /**
