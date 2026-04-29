@@ -17,12 +17,9 @@ import { ValidationError, NotFoundError } from "../../types/errors";
 import { GraphQLError } from "graphql";
 import type { BotsRow } from "@tachyonapp/tachyon-db";
 import { assertOwnership } from "../../../auth/authorization";
-import { getScanBotQueue, getReconciliationQueue } from "../../../queues";
+import { getScanBotQueue } from "../../../queues";
 import { QUEUE_NAMES } from "@tachyonapp/tachyon-queue-types";
-import type {
-  ScanBotJobPayload,
-  PositionClosePayload,
-} from "@tachyonapp/tachyon-queue-types";
+import type { ScanBotJobPayload } from "@tachyonapp/tachyon-queue-types";
 import { encrypt } from "../../../lib/crypto";
 import {
   ALLOWED_BYOK_PROVIDERS,
@@ -145,6 +142,12 @@ const BotResult = builder.unionType("BotResult", {
     if ("field" in value) return ValidationError;
     return NotFoundError;
   },
+});
+
+const DeleteBotResult = builder.simpleObject("DeleteBotResult", {
+  fields: (t) => ({
+    success: t.boolean(),
+  }),
 });
 
 // ---------------------------------------------------------------------------
@@ -634,6 +637,31 @@ builder.mutationField("activateBot", (t) =>
 
       assertOwnership(ctx, String(bot.user_id));
 
+      // Subscription guard — user must have an active or trialing subscription
+      const sub = await ctx.db
+        .selectFrom("user_subscriptions")
+        .where("user_id", "=", ctx.auth!.userId)
+        .select(["subscription_status"])
+        .executeTakeFirst();
+
+      if (
+        !sub ||
+        sub.subscription_status === "suspended" ||
+        sub.subscription_status === "cancelled"
+      ) {
+        throw new GraphQLError("Subscription required to activate bot", {
+          extensions: { code: "FORBIDDEN" },
+        });
+      }
+
+      // STOOD_DOWN guard — Feature 9 owns the reset path
+      if (bot.status === "STOOD_DOWN") {
+        throw new GraphQLError(
+          "Bot is stood down and will reactivate next trading day",
+          { extensions: { code: "BOT_STOOD_DOWN" } },
+        );
+      }
+
       // Bots must have settings configured before they can be activated
       if (!bot.current_settings_id) {
         return {
@@ -713,7 +741,7 @@ builder.mutationField("pauseBot", (t) =>
 
 builder.mutationField("deleteBot", (t) =>
   t.field({
-    type: BotResult,
+    type: DeleteBotResult,
     args: { id: t.arg.id({ required: true }) },
     authScopes: { authenticated: true },
     resolve: async (_root, args, ctx) => {
@@ -725,46 +753,35 @@ builder.mutationField("deleteBot", (t) =>
         .executeTakeFirst();
 
       if (!existing) {
-        return { message: "Bot not found" };
+        throw new GraphQLError("Bot not found", {
+          extensions: { code: "NOT_FOUND" },
+        });
       }
 
       assertOwnership(ctx, String(existing.user_id));
 
-      const updated = await ctx.db
-        .updateTable("bots")
-        .set({ status: "ARCHIVED" })
-        .where("id", "=", args.id)
-        .returningAll()
-        .executeTakeFirstOrThrow();
-
-      // If bot has an open position, dispatch a targeted close job
       const openPosition = await ctx.db
         .selectFrom("positions")
-        .select("id")
         .where("bot_id", "=", args.id)
         .where("status", "=", "OPEN")
+        .select("id")
         .executeTakeFirst();
 
       if (openPosition) {
-        const payload: PositionClosePayload = {
-          positionId: String(openPosition.id),
-          botId: String(existing.id),
-          userId: ctx.auth!.userId,
-          correlationId: ctx.correlationId,
-          enqueuedAt: new Date().toISOString(),
-        };
-
-        await getReconciliationQueue().add(
-          QUEUE_NAMES.RECONCILIATION,
-          payload,
-          {
-            attempts: 3,
-            backoff: { type: "exponential", delay: 2000 },
-          },
+        throw new GraphQLError(
+          "Cannot delete a bot with an open position. Close the position first.",
+          { extensions: { code: "VALIDATION_ERROR" } },
         );
       }
 
-      return updated;
+      await ctx.db
+        .updateTable("bots")
+        .set({ status: "ARCHIVED", deleted_at: new Date(), updated_at: new Date() })
+        .where("id", "=", args.id)
+        .where("user_id", "=", ctx.auth!.userId)
+        .execute();
+
+      return { success: true };
     },
   }),
 );
