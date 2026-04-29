@@ -37,6 +37,7 @@ import "./domains/user/user.mutations";
 import "./domains/bots/bot.mutations";
 import "./domains/proposals/proposal.mutations";
 import "./domains/account/account.mutations";
+import "./domains/subscriptions/subscription.mutations";
 
 // Subscription stubs
 import "./domains/subscriptions/subscription.stubs";

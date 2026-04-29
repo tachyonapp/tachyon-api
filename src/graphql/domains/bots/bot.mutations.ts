@@ -14,13 +14,12 @@ import {
   BrainTypeEnum,
 } from "../../types/enums";
 import { ValidationError, NotFoundError } from "../../types/errors";
+import { GraphQLError } from "graphql";
+import type { BotsRow } from "@tachyonapp/tachyon-db";
 import { assertOwnership } from "../../../auth/authorization";
-import { getScanBotQueue, getReconciliationQueue } from "../../../queues";
+import { getScanBotQueue } from "../../../queues";
 import { QUEUE_NAMES } from "@tachyonapp/tachyon-queue-types";
-import type {
-  ScanBotJobPayload,
-  PositionClosePayload,
-} from "@tachyonapp/tachyon-queue-types";
+import type { ScanBotJobPayload } from "@tachyonapp/tachyon-queue-types";
 import { encrypt } from "../../../lib/crypto";
 import {
   ALLOWED_BYOK_PROVIDERS,
@@ -126,18 +125,6 @@ const CreateBotInput = builder.inputType("CreateBotInput", {
   }),
 });
 
-const UpdateBotInput = builder.inputType("UpdateBotInput", {
-  fields: (t) => ({
-    name: t.string({ required: false }),
-    allocationPct: t.field({ type: "Decimal", required: false }),
-    dailyMaxLoss: t.field({ type: "Decimal", required: false }),
-    dailyMaxGain: t.field({ type: "Decimal", required: false }),
-    riskAttitude: t.field({ type: RiskAttitudeEnum, required: false }),
-    tradeTempo: t.field({ type: TradeTempoEnum, required: false }),
-    combatPatience: t.field({ type: CombatPatienceEnum, required: false }),
-  }),
-});
-
 // ---------------------------------------------------------------------------
 // Result union types
 // Bot is backed by BotsRow — discriminate on `frame_id` (always present on a bot row)
@@ -148,7 +135,7 @@ const CreateBotResult = builder.unionType("CreateBotResult", {
   resolveType: (value) => ("frame_id" in value ? "Bot" : ValidationError),
 });
 
-const UpdateBotResult = builder.unionType("UpdateBotResult", {
+const BotResult = builder.unionType("BotResult", {
   types: ["Bot", ValidationError, NotFoundError],
   resolveType: (value) => {
     if ("frame_id" in value) return "Bot";
@@ -157,13 +144,10 @@ const UpdateBotResult = builder.unionType("UpdateBotResult", {
   },
 });
 
-const BotResult = builder.unionType("BotResult", {
-  types: ["Bot", ValidationError, NotFoundError],
-  resolveType: (value) => {
-    if ("frame_id" in value) return "Bot";
-    if ("field" in value) return ValidationError;
-    return NotFoundError;
-  },
+const DeleteBotResult = builder.simpleObject("DeleteBotResult", {
+  fields: (t) => ({
+    success: t.boolean(),
+  }),
 });
 
 // ---------------------------------------------------------------------------
@@ -624,119 +608,6 @@ builder.mutationField("createBot", (t) =>
 );
 
 // ---------------------------------------------------------------------------
-// updateBot
-// ---------------------------------------------------------------------------
-
-builder.mutationField("updateBot", (t) =>
-  t.field({
-    type: UpdateBotResult,
-    args: {
-      id: t.arg.id({ required: true }),
-      input: t.arg({ type: UpdateBotInput, required: true }),
-    },
-    authScopes: { authenticated: true },
-    resolve: async (_root, args, ctx) => {
-      const existing = await ctx.db
-        .selectFrom("bots")
-        .selectAll()
-        .where("id", "=", args.id)
-        .where("status", "!=", "ARCHIVED")
-        .executeTakeFirst();
-
-      if (!existing) {
-        return { message: "Bot not found" };
-      }
-
-      assertOwnership(ctx, String(existing.user_id));
-
-      const { input } = args;
-      const hasSettingsUpdate =
-        input.dailyMaxLoss != null ||
-        input.dailyMaxGain != null ||
-        input.riskAttitude != null ||
-        input.tradeTempo != null ||
-        input.combatPatience != null ||
-        input.allocationPct != null;
-
-      await ctx.db.transaction().execute(async (trx) => {
-        if (input.name != null) {
-          await trx
-            .updateTable("bots")
-            .set({ name: input.name })
-            .where("id", "=", args.id)
-            .execute();
-        }
-
-        if (hasSettingsUpdate) {
-          // Fetch current settings to carry forward unchanged fields
-          const currentSettings = existing.current_settings_id
-            ? await trx
-                .selectFrom("bot_settings")
-                .selectAll()
-                .where("id", "=", existing.current_settings_id)
-                .executeTakeFirstOrThrow()
-            : null;
-
-          // Create a new bot_settings row — preserves version history
-          // (bot_settings.effective_from tracks when each version took effect)
-          const newSettings = await trx
-            .insertInto("bot_settings")
-            .values({
-              bot_id: args.id,
-              daily_max_loss_pct:
-                input.dailyMaxLoss ??
-                currentSettings?.daily_max_loss_pct?.toString() ??
-                "0",
-              daily_max_gain:
-                input.dailyMaxGain ?? currentSettings?.daily_max_gain ?? "0",
-              risk_attitude:
-                input.riskAttitude ??
-                currentSettings?.risk_attitude ??
-                "BALANCED",
-              trade_tempo:
-                input.tradeTempo ??
-                currentSettings?.trade_tempo ??
-                "OPPORTUNISTIC",
-              combat_patience:
-                input.combatPatience ??
-                currentSettings?.combat_patience ??
-                "PATIENT",
-              exit_personality_id: currentSettings?.exit_personality_id ?? "1",
-              stop_style_id: currentSettings?.stop_style_id ?? "1",
-            })
-            .returning("id")
-            .executeTakeFirstOrThrow();
-
-          if (input.allocationPct != null) {
-            await trx
-              .updateTable("bots")
-              .set({
-                current_settings_id: newSettings.id,
-                allocation_pct: input.allocationPct,
-              })
-              .where("id", "=", args.id)
-              .execute();
-          } else {
-            await trx
-              .updateTable("bots")
-              .set({ current_settings_id: newSettings.id })
-              .where("id", "=", args.id)
-              .execute();
-          }
-        }
-      });
-
-      // Re-fetch after transaction to get final state
-      return ctx.db
-        .selectFrom("bots")
-        .selectAll()
-        .where("id", "=", args.id)
-        .executeTakeFirstOrThrow();
-    },
-  }),
-);
-
-// ---------------------------------------------------------------------------
 // activateBot
 // ---------------------------------------------------------------------------
 
@@ -765,6 +636,31 @@ builder.mutationField("activateBot", (t) =>
       }
 
       assertOwnership(ctx, String(bot.user_id));
+
+      // Subscription guard — user must have an active or trialing subscription
+      const sub = await ctx.db
+        .selectFrom("user_subscriptions")
+        .where("user_id", "=", ctx.auth!.userId)
+        .select(["subscription_status"])
+        .executeTakeFirst();
+
+      if (
+        !sub ||
+        sub.subscription_status === "suspended" ||
+        sub.subscription_status === "cancelled"
+      ) {
+        throw new GraphQLError("Subscription required to activate bot", {
+          extensions: { code: "FORBIDDEN" },
+        });
+      }
+
+      // STOOD_DOWN guard — Feature 9 owns the reset path
+      if (bot.status === "STOOD_DOWN") {
+        throw new GraphQLError(
+          "Bot is stood down and will reactivate next trading day",
+          { extensions: { code: "BOT_STOOD_DOWN" } },
+        );
+      }
 
       // Bots must have settings configured before they can be activated
       if (!bot.current_settings_id) {
@@ -845,7 +741,7 @@ builder.mutationField("pauseBot", (t) =>
 
 builder.mutationField("deleteBot", (t) =>
   t.field({
-    type: BotResult,
+    type: DeleteBotResult,
     args: { id: t.arg.id({ required: true }) },
     authScopes: { authenticated: true },
     resolve: async (_root, args, ctx) => {
@@ -857,46 +753,35 @@ builder.mutationField("deleteBot", (t) =>
         .executeTakeFirst();
 
       if (!existing) {
-        return { message: "Bot not found" };
+        throw new GraphQLError("Bot not found", {
+          extensions: { code: "NOT_FOUND" },
+        });
       }
 
       assertOwnership(ctx, String(existing.user_id));
 
-      const updated = await ctx.db
-        .updateTable("bots")
-        .set({ status: "ARCHIVED" })
-        .where("id", "=", args.id)
-        .returningAll()
-        .executeTakeFirstOrThrow();
-
-      // If bot has an open position, dispatch a targeted close job
       const openPosition = await ctx.db
         .selectFrom("positions")
-        .select("id")
         .where("bot_id", "=", args.id)
         .where("status", "=", "OPEN")
+        .select("id")
         .executeTakeFirst();
 
       if (openPosition) {
-        const payload: PositionClosePayload = {
-          positionId: String(openPosition.id),
-          botId: String(existing.id),
-          userId: ctx.auth!.userId,
-          correlationId: ctx.correlationId,
-          enqueuedAt: new Date().toISOString(),
-        };
-
-        await getReconciliationQueue().add(
-          QUEUE_NAMES.RECONCILIATION,
-          payload,
-          {
-            attempts: 3,
-            backoff: { type: "exponential", delay: 2000 },
-          },
+        throw new GraphQLError(
+          "Cannot delete a bot with an open position. Close the position first.",
+          { extensions: { code: "VALIDATION_ERROR" } },
         );
       }
 
-      return updated;
+      await ctx.db
+        .updateTable("bots")
+        .set({ status: "ARCHIVED", deleted_at: new Date(), updated_at: new Date() })
+        .where("id", "=", args.id)
+        .where("user_id", "=", ctx.auth!.userId)
+        .execute();
+
+      return { success: true };
     },
   }),
 );
@@ -908,6 +793,93 @@ builder.mutationField("deleteBot", (t) =>
 // client never embeds provider-specific validation logic. The key is NOT
 // stored — only the validation result is returned.
 // ---------------------------------------------------------------------------
+
+// ---------------------------------------------------------------------------
+// updateBotIdentity
+// ---------------------------------------------------------------------------
+
+const UpdateBotIdentityInput = builder.inputType("UpdateBotIdentityInput", {
+  fields: (t) => ({
+    name: t.string({ required: true }),
+    avatarId: t.id({ required: true }),
+  }),
+});
+
+const UpdateBotIdentityResult = builder.objectRef<{ bot: BotsRow }>(
+  "UpdateBotIdentityResult",
+);
+builder.objectType(UpdateBotIdentityResult, {
+  fields: (t) => ({
+    bot: t.field({
+      type: "Bot",
+      resolve: (r) => r.bot,
+    }),
+  }),
+});
+
+builder.mutationField("updateBotIdentity", (t) =>
+  t.field({
+    type: UpdateBotIdentityResult,
+    args: {
+      id: t.arg.id({ required: true }),
+      input: t.arg({ type: UpdateBotIdentityInput, required: true }),
+    },
+    authScopes: { authenticated: true },
+    resolve: async (_root, { id, input }, ctx) => {
+      await withOpRateLimit(
+        ctx,
+        "updateBotIdentity",
+        OP_RATE_LIMITS.updateBotIdentity.limit,
+        OP_RATE_LIMITS.updateBotIdentity.windowSeconds,
+      );
+
+      if (input.name.length > 24) {
+        throw new GraphQLError("Bot name must be 24 characters or fewer", {
+          extensions: { code: "VALIDATION_ERROR", field: "name" },
+        });
+      }
+
+      const bot = await ctx.db
+        .selectFrom("bots")
+        .where("id", "=", id)
+        .select(["id", "user_id"])
+        .executeTakeFirst();
+
+      if (!bot) {
+        throw new GraphQLError("Bot not found", {
+          extensions: { code: "NOT_FOUND" },
+        });
+      }
+
+      assertOwnership(ctx, String(bot.user_id));
+
+      const avatar = await ctx.db
+        .selectFrom("bot_avatars")
+        .where("id", "=", input.avatarId)
+        .select("id")
+        .executeTakeFirst();
+
+      if (!avatar) {
+        throw new GraphQLError("Avatar not found", {
+          extensions: { code: "NOT_FOUND", field: "avatarId" },
+        });
+      }
+
+      const updated = await ctx.db
+        .updateTable("bots")
+        .set({
+          name: input.name,
+          avatar_id: avatar.id,
+          updated_at: new Date(),
+        })
+        .where("id", "=", id)
+        .returningAll()
+        .executeTakeFirstOrThrow();
+
+      return { bot: updated };
+    },
+  }),
+);
 
 function providerValidationErrorMessage(body: unknown): string | undefined {
   if (typeof body !== "object" || body === null) return undefined;

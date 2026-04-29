@@ -107,3 +107,11 @@ export const OrderEntryTypeEnum = builder.enumType("OrderEntryType", {
 export const BrokerConnStatusEnum = builder.enumType("BrokerConnStatus", {
   values: ["ACTIVE", "ERROR", "REVOKED"] as const,
 });
+
+export const SubscriptionTierEnum = builder.enumType("SubscriptionTier", {
+  values: ["FREE_TRIAL", "BYOK", "TACHYON_HOSTED"] as const,
+});
+
+export const SubscriptionStatusEnum = builder.enumType("SubscriptionStatus", {
+  values: ["trialing", "active", "past_due", "cancelled", "suspended"] as const,
+});

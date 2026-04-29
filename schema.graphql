@@ -30,6 +30,7 @@ interface BaseError {
 type Bot {
   activePosition: Position
   allocationPct: Decimal
+  botBrainConfig: BotBrainConfig
   brain: BotBrainConfig
   combatPatience: CombatPatience
   createdAt: DateTime
@@ -41,6 +42,8 @@ type Bot {
   owner: User
   proposals(status: ProposalStatus): [Proposal!]
   riskAttitude: RiskAttitude
+  scanCapRemaining: Int
+  scanCapUsed: Int
   status: BotStatus
   tradeTempo: TradeTempo
   updatedAt: DateTime
@@ -62,6 +65,26 @@ enum BotFrame {
   SNIPER
 }
 
+type BotPerformanceResult {
+  approvalRatePct: Decimal
+  avgGainPerWin: Decimal
+  avgHoldDurationHours: Decimal
+  avgLossPerLoss: Decimal
+  daysActive: Int
+  largestSingleLoss: Decimal
+  largestSingleWin: Decimal
+  lossCount: Int
+  pnlTimeSeries: [PnlDataPoint!]
+  profitFactor: Decimal
+  returnOnAllocatedCapitalPct: Decimal
+  skipRatePct: Decimal
+  totalProposalsApproved: Int
+  totalProposalsGenerated: Int
+  totalRealizedPnl: Decimal
+  winCount: Int
+  winRatePct: Decimal
+}
+
 union BotResult = Bot | NotFoundError | ValidationError
 
 enum BotStatus {
@@ -69,6 +92,11 @@ enum BotStatus {
   ARCHIVED
   DRAFT
   PAUSED
+  STOOD_DOWN
+}
+
+type BotStoodDownError implements BaseError {
+  message: String
 }
 
 type BrainCatalog {
@@ -103,6 +131,10 @@ enum BrokerConnStatus {
   ACTIVE
   ERROR
   REVOKED
+}
+
+type CancelSubscriptionResult {
+  success: Boolean
 }
 
 enum CombatPatience {
@@ -148,6 +180,10 @@ type DefaultBrainInfo {
   provider: String
 }
 
+type DeleteBotResult {
+  success: Boolean
+}
+
 input EmotionalControlsInput {
   cooldownAfterVolatility: Boolean!
   freezeAfterLosses: Int
@@ -174,15 +210,17 @@ input MarketAwarenessInput {
 type Mutation {
   activateBot(id: ID!): BotResult
   approveProposal(id: ID!): ApproveProposalResult
+  cancelSubscription: CancelSubscriptionResult
 
   """Mark the authenticated user's FTUE as complete. Idempotent."""
   completeOnboarding: Boolean
   connectBroker(brokerName: String!, credentials: String!): ConnectBrokerResult
   createBot(input: CreateBotInput!): CreateBotResult
-  deleteBot(id: ID!): BotResult
+  deleteBot(id: ID!): DeleteBotResult
   pauseBot(id: ID!): BotResult
+  selectTier(stripePaymentMethodId: String, tier: SubscriptionTier!): SelectTierResult
   skipProposal(id: ID!): SkipProposalResult
-  updateBot(id: ID!, input: UpdateBotInput!): UpdateBotResult
+  updateBotIdentity(id: ID!, input: UpdateBotIdentityInput!): UpdateBotIdentityResult
   validateBrainKey(apiKey: String!, provider: String!): ValidateBrainKeyResult
 }
 
@@ -193,6 +231,11 @@ type NotFoundError implements BaseError {
 enum OrderEntryType {
   LIMIT
   MARKET
+}
+
+type PnlDataPoint {
+  cumulativePnl: Decimal
+  date: DateTime
 }
 
 """An open or closed trading position held by a bot"""
@@ -249,6 +292,7 @@ type Query {
   account: Account
   balance: Balance
   bot(id: ID!): Bot
+  botPerformance(id: ID!): BotPerformanceResult
   bots: [Bot!]
   brainProviders: BrainCatalog
   me: User
@@ -278,6 +322,12 @@ enum SectorFilter {
   TECH
 }
 
+type SelectTierResult {
+  subscriptionStatus: SubscriptionStatus
+  subscriptionTier: SubscriptionTier
+  trialExpiresAt: DateTime
+}
+
 union SkipProposalResult = AuthError | NotFoundError | Proposal
 
 input StopLossStyleInput {
@@ -295,33 +345,48 @@ type Subscription {
   proposalCreated(botId: ID!): Proposal
 }
 
+enum SubscriptionStatus {
+  active
+  cancelled
+  past_due
+  suspended
+  trialing
+}
+
+enum SubscriptionTier {
+  BYOK
+  FREE_TRIAL
+  TACHYON_HOSTED
+}
+
 enum TradeTempo {
   ACTIVE
   OPPORTUNISTIC
   RELENTLESS
 }
 
-input UpdateBotInput {
-  allocationPct: Decimal
-  combatPatience: CombatPatience
-  dailyMaxGain: Decimal
-  dailyMaxLoss: Decimal
-  name: String
-  riskAttitude: RiskAttitude
-  tradeTempo: TradeTempo
+input UpdateBotIdentityInput {
+  avatarId: ID!
+  name: String!
 }
 
-union UpdateBotResult = Bot | NotFoundError | ValidationError
+type UpdateBotIdentityResult {
+  bot: Bot
+}
 
 """An authenticated Tachyon user"""
 type User {
   auth0Id: String
   createdAt: DateTime
+  currentPeriodEnd: DateTime
   email: String
   id: ID
 
   """Whether the user has completed the FTUE onboarding flow."""
   onboardingCompleted: Boolean!
+  subscriptionStatus: SubscriptionStatus
+  subscriptionTier: SubscriptionTier
+  trialExpiresAt: DateTime
 }
 
 type ValidateBrainKeyResult {

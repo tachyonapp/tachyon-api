@@ -42,3 +42,14 @@ builder.objectType(NotFoundError, {
     message: t.exposeString("message"),
   }),
 });
+
+// BotStoodDownError — thrown when activateBot is called on a STOOD_DOWN bot
+export const BotStoodDownError = builder.objectRef<{ message: string }>(
+  "BotStoodDownError",
+);
+builder.objectType(BotStoodDownError, {
+  interfaces: [BaseError],
+  fields: (t) => ({
+    message: t.exposeString("message"),
+  }),
+});

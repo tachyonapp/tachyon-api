@@ -170,6 +170,59 @@ builder.objectType("Bot", {
       },
     }),
 
+    botBrainConfig: t.field({
+      type: BotBrainConfig,
+      nullable: true,
+      resolve: async (bot, _args, ctx) => {
+        const config = await ctx.loaders.botBrainConfigByBotId.load(
+          String(bot.id),
+        );
+        if (!config) return null;
+        return {
+          brainType:  config.brain_type,
+          modelId:    config.model_id,
+          provider:   config.provider ?? null,
+          keyPreview: config.key_preview ?? null,
+        };
+      },
+    }),
+
+    scanCapUsed: t.int({
+      nullable: true,
+      resolve: async (bot, _args, ctx) => {
+        const runtime = await ctx.db
+          .selectFrom("bot_runtime_data")
+          .where("bot_id", "=", bot.id)
+          .select("ai_calls_today")
+          .executeTakeFirst();
+        return runtime?.ai_calls_today ?? 0;
+      },
+    }),
+
+    scanCapRemaining: t.int({
+      nullable: true,
+      resolve: async (bot, _args, ctx) => {
+        const [runtime, sub] = await Promise.all([
+          ctx.db
+            .selectFrom("bot_runtime_data")
+            .where("bot_id", "=", bot.id)
+            .select("ai_calls_today")
+            .executeTakeFirst(),
+          ctx.db
+            .selectFrom("user_subscriptions")
+            .where("user_id", "=", bot.user_id)
+            .select("tier")
+            .executeTakeFirst(),
+        ]);
+
+        if (!sub) return null;
+        const used = runtime?.ai_calls_today ?? 0;
+        if (sub.tier === "FREE_TRIAL") return Math.max(0, 40 - used);
+        if (sub.tier === "TACHYON_HOSTED") return Math.max(0, 78 - used);
+        return null; // BYOK — no cap
+      },
+    }),
+
     createdAt: t.field({
       type: "DateTime",
       resolve: (bot) => new Date(bot.created_at),
@@ -179,6 +232,64 @@ builder.objectType("Bot", {
       type: "DateTime",
       resolve: (bot) => new Date(bot.updated_at),
     }),
+  }),
+});
+
+// ---------------------------------------------------------------------------
+// botPerformance result types
+// ---------------------------------------------------------------------------
+
+export type PnlDataPointShape = { date: Date; cumulativePnl: number };
+export type BotPerformanceShape = {
+  totalRealizedPnl: number;
+  returnOnAllocatedCapitalPct: number;
+  winCount: number;
+  lossCount: number;
+  winRatePct: number;
+  avgGainPerWin: number;
+  avgLossPerLoss: number;
+  profitFactor: number;
+  largestSingleWin: number;
+  largestSingleLoss: number;
+  avgHoldDurationHours: number;
+  daysActive: number;
+  totalProposalsGenerated: number;
+  totalProposalsApproved: number;
+  approvalRatePct: number;
+  skipRatePct: number;
+  pnlTimeSeries: PnlDataPointShape[];
+};
+
+export const PnlDataPoint =
+  builder.objectRef<PnlDataPointShape>("PnlDataPoint");
+builder.objectType(PnlDataPoint, {
+  fields: (t) => ({
+    date: t.field({ type: "DateTime", resolve: (p) => p.date }),
+    cumulativePnl: t.field({ type: "Decimal", resolve: (p) => p.cumulativePnl.toString() }),
+  }),
+});
+
+export const BotPerformanceResult =
+  builder.objectRef<BotPerformanceShape>("BotPerformanceResult");
+builder.objectType(BotPerformanceResult, {
+  fields: (t) => ({
+    totalRealizedPnl:            t.field({ type: "Decimal", resolve: (p) => p.totalRealizedPnl.toString() }),
+    returnOnAllocatedCapitalPct: t.field({ type: "Decimal", resolve: (p) => p.returnOnAllocatedCapitalPct.toString() }),
+    winCount:                    t.int({ resolve: (p) => p.winCount }),
+    lossCount:                   t.int({ resolve: (p) => p.lossCount }),
+    winRatePct:                  t.field({ type: "Decimal", resolve: (p) => p.winRatePct.toString() }),
+    avgGainPerWin:               t.field({ type: "Decimal", resolve: (p) => p.avgGainPerWin.toString() }),
+    avgLossPerLoss:              t.field({ type: "Decimal", resolve: (p) => p.avgLossPerLoss.toString() }),
+    profitFactor:                t.field({ type: "Decimal", resolve: (p) => p.profitFactor.toString() }),
+    largestSingleWin:            t.field({ type: "Decimal", resolve: (p) => p.largestSingleWin.toString() }),
+    largestSingleLoss:           t.field({ type: "Decimal", resolve: (p) => p.largestSingleLoss.toString() }),
+    avgHoldDurationHours:        t.field({ type: "Decimal", resolve: (p) => p.avgHoldDurationHours.toString() }),
+    daysActive:                  t.int({ resolve: (p) => p.daysActive }),
+    totalProposalsGenerated:     t.int({ resolve: (p) => p.totalProposalsGenerated }),
+    totalProposalsApproved:      t.int({ resolve: (p) => p.totalProposalsApproved }),
+    approvalRatePct:             t.field({ type: "Decimal", resolve: (p) => p.approvalRatePct.toString() }),
+    skipRatePct:                 t.field({ type: "Decimal", resolve: (p) => p.skipRatePct.toString() }),
+    pnlTimeSeries:               t.field({ type: [PnlDataPoint], resolve: (p) => p.pnlTimeSeries }),
   }),
 });
 
