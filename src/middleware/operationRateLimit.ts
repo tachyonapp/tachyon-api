@@ -16,6 +16,7 @@ export const OP_RATE_LIMITS: Record<
   pauseBot: { limit: 10, windowSeconds: 60 },
   connectBroker: { limit: 3, windowSeconds: 3600 },
   botPerformance: { limit: 20, windowSeconds: 60 },
+  updateBotIdentity: { limit: 10, windowSeconds: 60 },
 };
 
 /**

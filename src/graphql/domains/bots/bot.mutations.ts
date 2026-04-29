@@ -14,6 +14,8 @@ import {
   BrainTypeEnum,
 } from "../../types/enums";
 import { ValidationError, NotFoundError } from "../../types/errors";
+import { GraphQLError } from "graphql";
+import type { BotsRow } from "@tachyonapp/tachyon-db";
 import { assertOwnership } from "../../../auth/authorization";
 import { getScanBotQueue, getReconciliationQueue } from "../../../queues";
 import { QUEUE_NAMES } from "@tachyonapp/tachyon-queue-types";
@@ -774,6 +776,93 @@ builder.mutationField("deleteBot", (t) =>
 // client never embeds provider-specific validation logic. The key is NOT
 // stored — only the validation result is returned.
 // ---------------------------------------------------------------------------
+
+// ---------------------------------------------------------------------------
+// updateBotIdentity
+// ---------------------------------------------------------------------------
+
+const UpdateBotIdentityInput = builder.inputType("UpdateBotIdentityInput", {
+  fields: (t) => ({
+    name: t.string({ required: true }),
+    avatarId: t.id({ required: true }),
+  }),
+});
+
+const UpdateBotIdentityResult = builder.objectRef<{ bot: BotsRow }>(
+  "UpdateBotIdentityResult",
+);
+builder.objectType(UpdateBotIdentityResult, {
+  fields: (t) => ({
+    bot: t.field({
+      type: "Bot",
+      resolve: (r) => r.bot,
+    }),
+  }),
+});
+
+builder.mutationField("updateBotIdentity", (t) =>
+  t.field({
+    type: UpdateBotIdentityResult,
+    args: {
+      id: t.arg.id({ required: true }),
+      input: t.arg({ type: UpdateBotIdentityInput, required: true }),
+    },
+    authScopes: { authenticated: true },
+    resolve: async (_root, { id, input }, ctx) => {
+      await withOpRateLimit(
+        ctx,
+        "updateBotIdentity",
+        OP_RATE_LIMITS.updateBotIdentity.limit,
+        OP_RATE_LIMITS.updateBotIdentity.windowSeconds,
+      );
+
+      if (input.name.length > 24) {
+        throw new GraphQLError("Bot name must be 24 characters or fewer", {
+          extensions: { code: "VALIDATION_ERROR", field: "name" },
+        });
+      }
+
+      const bot = await ctx.db
+        .selectFrom("bots")
+        .where("id", "=", id)
+        .select(["id", "user_id"])
+        .executeTakeFirst();
+
+      if (!bot) {
+        throw new GraphQLError("Bot not found", {
+          extensions: { code: "NOT_FOUND" },
+        });
+      }
+
+      assertOwnership(ctx, String(bot.user_id));
+
+      const avatar = await ctx.db
+        .selectFrom("bot_avatars")
+        .where("id", "=", input.avatarId)
+        .select("id")
+        .executeTakeFirst();
+
+      if (!avatar) {
+        throw new GraphQLError("Avatar not found", {
+          extensions: { code: "NOT_FOUND", field: "avatarId" },
+        });
+      }
+
+      const updated = await ctx.db
+        .updateTable("bots")
+        .set({
+          name: input.name,
+          avatar_id: avatar.id,
+          updated_at: new Date(),
+        })
+        .where("id", "=", id)
+        .returningAll()
+        .executeTakeFirstOrThrow();
+
+      return { bot: updated };
+    },
+  }),
+);
 
 function providerValidationErrorMessage(body: unknown): string | undefined {
   if (typeof body !== "object" || body === null) return undefined;
