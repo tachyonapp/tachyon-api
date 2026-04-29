@@ -17,6 +17,7 @@ import { correlationIdMiddleware } from "./middleware/correlationId";
 import { rateLimitMiddleware } from "./middleware/rateLimit";
 import { clerkJwtMiddleware } from "./middleware/auth";
 import { clerkWebhookHandler } from "./webhooks/clerk";
+import { stripeWebhookHandler } from "./webhooks/stripe";
 import { logger } from "./lib/logger";
 import { mountDashboard } from "./bullboard/bullboard";
 import { checkPostgres, checkValkey } from "./health";
@@ -88,6 +89,14 @@ export async function createApp() {
       res.status(503).json({ status: "not ready" });
     }
   });
+
+  // Stripe webhook — must use raw body so Stripe can verify the HMAC signature.
+  // Mounted before any json() body-parser middleware.
+  app.post(
+    "/webhooks/stripe",
+    express.raw({ type: "application/json" }),
+    stripeWebhookHandler,
+  );
 
   // Clerk webhook — must use raw body so Svix can verify the HMAC signature.
   // Mounted before any json() body-parser middleware.
