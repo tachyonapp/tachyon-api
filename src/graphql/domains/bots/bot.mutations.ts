@@ -85,7 +85,7 @@ const CreateBotInput = builder.inputType("CreateBotInput", {
     // Frame & Identity
     name: t.string({ required: true }), // max 24 chars
     frameName: t.field({ type: BotFrameEnum, required: true }),
-    avatarId: t.id({ required: true }),
+    avatarSeed: t.string({ required: true }),
     colorway: t.string({ required: true }), // hex string e.g. "#2C6BED"
 
     // Core trading parameters
@@ -431,22 +431,7 @@ builder.mutationField("createBot", (t) =>
         }
       }
 
-      // Step 11: Look up avatar
-      const avatar = await ctx.db
-        .selectFrom("bot_avatars")
-        .select("id")
-        .where("id", "=", input.avatarId)
-        .executeTakeFirst();
-
-      if (!avatar) {
-        return {
-          message: "Avatar not found",
-          field: "avatarId",
-          code: "AVATAR_NOT_FOUND",
-        };
-      }
-
-      // Step 12: Look up exit_personality by name
+      // Step 11: Look up exit_personality by name
       const exitPersonality = await ctx.db
         .selectFrom("exit_personalities")
         .select("id")
@@ -462,7 +447,7 @@ builder.mutationField("createBot", (t) =>
         };
       }
 
-      // Step 13: Look up stop_style by name
+      // Step 12: Look up stop_style by name
       const stopStyle = await ctx.db
         .selectFrom("stop_styles")
         .select("id")
@@ -478,7 +463,7 @@ builder.mutationField("createBot", (t) =>
         };
       }
 
-      // Step 14: Idempotency check — return existing DRAFT bot if same name was created within 60s
+      // Step 13: Idempotency check — return existing DRAFT bot if same name was created within 60s
       const sixtySecondsAgo = new Date(Date.now() - 60_000);
       const existingDraft = await ctx.db
         .selectFrom("bots")
@@ -493,7 +478,7 @@ builder.mutationField("createBot", (t) =>
         return existingDraft;
       }
 
-      // Step 15: Atomic DB transaction — no orphaned records on partial failure
+      // Step 14: Atomic DB transaction — no orphaned records on partial failure
       const botId = await ctx.db.transaction().execute(async (trx) => {
         // a. Insert bot with DRAFT status (circular FK on current_settings_id resolved in step d)
         const newBot = await trx
@@ -501,7 +486,7 @@ builder.mutationField("createBot", (t) =>
           .values({
             user_id: ctx.auth!.userId,
             frame_id: frame.id,
-            avatar_id: avatar.id,
+            avatar_seed: input.avatarSeed,
             name: input.name,
             colorway: input.colorway,
             allocation_pct: input.allocationPct,
@@ -801,7 +786,7 @@ builder.mutationField("deleteBot", (t) =>
 const UpdateBotIdentityInput = builder.inputType("UpdateBotIdentityInput", {
   fields: (t) => ({
     name: t.string({ required: true }),
-    avatarId: t.id({ required: true }),
+    avatarSeed: t.string({ required: true }),
   }),
 });
 
@@ -853,23 +838,11 @@ builder.mutationField("updateBotIdentity", (t) =>
 
       assertOwnership(ctx, String(bot.user_id));
 
-      const avatar = await ctx.db
-        .selectFrom("bot_avatars")
-        .where("id", "=", input.avatarId)
-        .select("id")
-        .executeTakeFirst();
-
-      if (!avatar) {
-        throw new GraphQLError("Avatar not found", {
-          extensions: { code: "NOT_FOUND", field: "avatarId" },
-        });
-      }
-
       const updated = await ctx.db
         .updateTable("bots")
         .set({
           name: input.name,
-          avatar_id: avatar.id,
+          avatar_seed: input.avatarSeed,
           updated_at: new Date(),
         })
         .where("id", "=", id)

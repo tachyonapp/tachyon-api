@@ -276,7 +276,7 @@ const CREATE_BOT_MUTATION = `
 const validScoutInput = {
   name: "TestScout",
   frameName: "SCOUT",
-  avatarId: "1",
+  avatarSeed: "TestScout",
   colorway: "#2C6BED",
   allocationPct: "0.1",
   riskAttitude: "BALANCED",
@@ -310,14 +310,6 @@ describe("POST /graphql — createBot mutations", () => {
     // Uses ON CONFLICT DO NOTHING so repeated runs are safe.
     const { getDb } = await import("../lib/db");
     const db = getDb();
-
-    await db
-      .insertInto("bot_avatars")
-      .values([{ img: "https://assets.tachyon.app/avatars/default.png" }])
-      .execute()
-      .catch(() => {
-        /* avatar id=1 likely already seeded */
-      });
 
     await db
       .insertInto("bot_frames")
@@ -560,18 +552,12 @@ describe("POST /graphql — createBot mutations", () => {
       .where("name", "=", "SCOUT")
       .executeTakeFirstOrThrow();
 
-    const avatarRow = await db
-      .selectFrom("bot_avatars")
-      .select("id")
-      .orderBy("id", "asc")
-      .executeTakeFirstOrThrow();
-
     const [draftBot] = await db
       .insertInto("bots")
       .values({
         user_id: user.id,
         frame_id: frameRow.id,
-        avatar_id: avatarRow.id,
+        avatar_seed: "IdempotentBot",
         name: "IdempotentBot",
         colorway: "#2C6BED",
         allocation_pct: "0.1",
@@ -605,7 +591,7 @@ describe("POST /graphql — createBot mutations", () => {
     const berserkerInput = {
       name: "RageBerserker",
       frameName: "BERSERKER",
-      avatarId: "1",
+      avatarSeed: "RageBerserker",
       colorway: "#D64545",
       allocationPct: "0.15",
       riskAttitude: "AGGRESSIVE",
