@@ -298,6 +298,8 @@ builder.objectType("Bot", {
       },
     }),
 
+    avatarSeed: t.exposeString("avatar_seed"),
+
     createdAt: t.field({
       type: "DateTime",
       resolve: (bot) => new Date(bot.created_at),
