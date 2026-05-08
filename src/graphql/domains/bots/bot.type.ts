@@ -6,6 +6,7 @@ import {
   TradeTempoEnum,
   CombatPatienceEnum,
   ProposalStatusEnum,
+  SectorFilterEnum,
   type BotFrameName,
 } from "../../types/enums";
 
@@ -27,6 +28,22 @@ builder.objectType(BotBrainConfig, {
     modelId:    t.exposeString("modelId"),
     provider:   t.exposeString("provider",   { nullable: true }),
     keyPreview: t.exposeString("keyPreview", { nullable: true }),
+  }),
+});
+
+const MarketAwareness = builder.objectRef<{
+  momentum: number;
+  meanReversion: number;
+  volatility: number;
+  trendFollowing: number;
+}>("MarketAwareness");
+
+builder.objectType(MarketAwareness, {
+  fields: (t) => ({
+    momentum:      t.exposeFloat("momentum"),
+    meanReversion: t.exposeFloat("meanReversion"),
+    volatility:    t.exposeFloat("volatility"),
+    trendFollowing: t.exposeFloat("trendFollowing"),
   }),
 });
 
@@ -117,6 +134,57 @@ builder.objectType("Bot", {
           String(bot.current_settings_id),
         );
         return s?.combat_patience ?? null;
+      },
+    }),
+
+    marketAwareness: t.field({
+      type: MarketAwareness,
+      nullable: true,
+      resolve: async (bot, _args, ctx) => {
+        if (!bot.current_settings_id) return null;
+        const s = await ctx.loaders.botSettingsById.load(String(bot.current_settings_id));
+        if (!s?.market_awareness) return null;
+        return s.market_awareness as { momentum: number; meanReversion: number; volatility: number; trendFollowing: number };
+      },
+    }),
+
+    sectors: t.field({
+      type: [SectorFilterEnum],
+      nullable: true,
+      resolve: async (bot, _args, ctx) => {
+        if (!bot.current_settings_id) return null;
+        const s = await ctx.loaders.botSettingsById.load(String(bot.current_settings_id));
+        return (s?.sectors as typeof SectorFilterEnum.$inferType[] | null) ?? null;
+      },
+    }),
+
+    exitStyle: t.string({
+      nullable: true,
+      resolve: async (bot, _args, ctx) => {
+        if (!bot.current_settings_id) return null;
+        const s = await ctx.loaders.botSettingsById.load(String(bot.current_settings_id));
+        if (!s?.exit_personality_id) return null;
+        const row = await ctx.db
+          .selectFrom("exit_personalities")
+          .select("name")
+          .where("id", "=", s.exit_personality_id)
+          .executeTakeFirst();
+        return row?.name ?? null;
+      },
+    }),
+
+    stopStyle: t.string({
+      nullable: true,
+      resolve: async (bot, _args, ctx) => {
+        if (!bot.current_settings_id) return null;
+        const s = await ctx.loaders.botSettingsById.load(String(bot.current_settings_id));
+        if (!s?.stop_style_id) return null;
+        const row = await ctx.db
+          .selectFrom("stop_styles")
+          .select("name")
+          .where("id", "=", s.stop_style_id)
+          .executeTakeFirst();
+        return row?.name ?? null;
       },
     }),
 

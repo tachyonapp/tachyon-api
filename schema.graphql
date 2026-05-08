@@ -36,15 +36,19 @@ type Bot {
   createdAt: DateTime
   dailyMaxGain: Decimal
   dailyMaxLoss: Decimal
+  exitStyle: String
   frame: BotFrame
   id: ID
+  marketAwareness: MarketAwareness
   name: String
   owner: User
   proposals(status: ProposalStatus): [Proposal!]
   riskAttitude: RiskAttitude
   scanCapRemaining: Int
   scanCapUsed: Int
+  sectors: [SectorFilter!]
   status: BotStatus
+  stopStyle: String
   tradeTempo: TradeTempo
   updatedAt: DateTime
 }
@@ -198,6 +202,13 @@ enum ExitPersonalityName {
   BALANCED
   PATIENT
   QUICK_FINISHER
+}
+
+type MarketAwareness {
+  meanReversion: Float
+  momentum: Float
+  trendFollowing: Float
+  volatility: Float
 }
 
 input MarketAwarenessInput {
