@@ -148,7 +148,7 @@ union ConnectBrokerResult = Account | ValidationError
 
 input CreateBotInput {
   allocationPct: Decimal!
-  avatarId: ID!
+  avatarSeed: String!
   brain: BrainConfigInput!
   colorway: String!
   combatPatience: CombatPatience!
@@ -366,7 +366,7 @@ enum TradeTempo {
 }
 
 input UpdateBotIdentityInput {
-  avatarId: ID!
+  avatarSeed: String!
   name: String!
 }
 
