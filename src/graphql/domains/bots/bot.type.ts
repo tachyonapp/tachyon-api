@@ -154,7 +154,14 @@ builder.objectType("Bot", {
       resolve: async (bot, _args, ctx) => {
         if (!bot.current_settings_id) return null;
         const s = await ctx.loaders.botSettingsById.load(String(bot.current_settings_id));
-        return (s?.sectors as typeof SectorFilterEnum.$inferType[] | null) ?? null;
+        if (!s?.sectors) return null;
+        // pg returns user-defined enum arrays as "{VAL1,VAL2}" strings rather than JS arrays.
+        // Parse defensively to handle both the raw string format and any future auto-parsed arrays.
+        const raw = s.sectors;
+        const arr: string[] = Array.isArray(raw)
+          ? (raw as string[])
+          : String(raw).replace(/^{|}$/g, "").split(",").filter(Boolean);
+        return arr as typeof SectorFilterEnum.$inferType[];
       },
     }),
 
