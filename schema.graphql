@@ -30,6 +30,7 @@ interface BaseError {
 type Bot {
   activePosition: Position
   allocationPct: Decimal
+  avatarSeed: String
   botBrainConfig: BotBrainConfig
   brain: BotBrainConfig
   combatPatience: CombatPatience
