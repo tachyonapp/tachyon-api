@@ -7,6 +7,24 @@ import {
   BYOK_PROVIDER_CATALOG,
 } from "../../../config/brainProviders";
 import { BrainCatalog, BotPerformanceResult } from "./bot.type";
+import { ALLOWED_SECTORS } from "@tachyonapp/tachyon-queue-types";
+
+const SectorDefinitionType = builder.simpleObject("SectorDefinition", {
+  fields: (t) => ({
+    parentSector: t.string(),
+    subSectors: t.stringList(),
+  }),
+});
+
+// Public — no auth required; static array, no DB query
+builder.queryField("parentSectors", (t) =>
+  t.field({
+    type: [SectorDefinitionType],
+    nullable: false,
+    authScopes: {},
+    resolve: () => ALLOWED_SECTORS,
+  }),
+);
 
 // Public catalog — no auth required; mobile fetches this at wizard entry
 builder.queryField("brainProviders", (t) =>
