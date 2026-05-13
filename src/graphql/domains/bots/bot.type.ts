@@ -7,6 +7,17 @@ import {
   CombatPatienceEnum,
   ProposalStatusEnum,
   SectorFilterEnum,
+  ConfidenceThresholdEnum,
+  RegimeAwarenessEnum,
+  EarningsBehaviorEnum,
+  DividendPreferenceEnum,
+  ShortInterestSignalEnum,
+  PositionSizingMethodEnum,
+  RecoveryModeEnum,
+  SessionPreferenceEnum,
+  VolatilityEnvPreferenceEnum,
+  ProposalCommunicationStyleEnum,
+  DayOfWeekEnum,
   type BotFrameName,
 } from "../../types/enums";
 
@@ -205,6 +216,247 @@ export const BotRef = builder.objectType("Bot", {
           .where("id", "=", s.stop_style_id)
           .executeTakeFirst();
         return row?.name ?? null;
+      },
+    }),
+
+    // Feature 8b — Advanced Agent Customization fields (all nullable; null for pre-8b bots)
+
+    signalWeights: t.field({
+      type: SignalWeightsOutput,
+      nullable: true,
+      resolve: async (bot, _args, ctx) => {
+        if (!bot.current_settings_id) return null;
+        const s = await ctx.loaders.botSettingsById.load(
+          String(bot.current_settings_id),
+        );
+        if (!s?.signal_weights) return null;
+        return JSON.parse(s.signal_weights as string) as {
+          technicals: number;
+          news: number;
+          fundamentals: number;
+        };
+      },
+    }),
+
+    confidenceThreshold: t.field({
+      type: ConfidenceThresholdEnum,
+      nullable: true,
+      resolve: async (bot, _args, ctx) => {
+        if (!bot.current_settings_id) return null;
+        const s = await ctx.loaders.botSettingsById.load(
+          String(bot.current_settings_id),
+        );
+        return s?.confidence_threshold ?? null;
+      },
+    }),
+
+    regimeAwareness: t.field({
+      type: RegimeAwarenessEnum,
+      nullable: true,
+      resolve: async (bot, _args, ctx) => {
+        if (!bot.current_settings_id) return null;
+        const s = await ctx.loaders.botSettingsById.load(
+          String(bot.current_settings_id),
+        );
+        return s?.regime_awareness ?? null;
+      },
+    }),
+
+    earningsBehavior: t.field({
+      type: EarningsBehaviorEnum,
+      nullable: true,
+      resolve: async (bot, _args, ctx) => {
+        if (!bot.current_settings_id) return null;
+        const s = await ctx.loaders.botSettingsById.load(
+          String(bot.current_settings_id),
+        );
+        return s?.earnings_behavior ?? null;
+      },
+    }),
+
+    subSectors: t.stringList({
+      resolve: async (bot, _args, ctx) => {
+        if (!bot.current_settings_id) return [];
+        const s = await ctx.loaders.botSettingsById.load(
+          String(bot.current_settings_id),
+        );
+        if (!s?.sub_sectors) return [];
+        return JSON.parse(s.sub_sectors as string) as string[];
+      },
+    }),
+
+    customWatchlist: t.stringList({
+      resolve: async (bot, _args, ctx) => {
+        if (!bot.current_settings_id) return [];
+        const s = await ctx.loaders.botSettingsById.load(
+          String(bot.current_settings_id),
+        );
+        if (!s?.custom_watchlist) return [];
+        return JSON.parse(s.custom_watchlist as string) as string[];
+      },
+    }),
+
+    exclusionList: t.stringList({
+      resolve: async (bot, _args, ctx) => {
+        if (!bot.current_settings_id) return [];
+        const s = await ctx.loaders.botSettingsById.load(
+          String(bot.current_settings_id),
+        );
+        if (!s?.exclusion_list) return [];
+        return JSON.parse(s.exclusion_list as string) as string[];
+      },
+    }),
+
+    dividendPreference: t.field({
+      type: DividendPreferenceEnum,
+      nullable: true,
+      resolve: async (bot, _args, ctx) => {
+        if (!bot.current_settings_id) return null;
+        const s = await ctx.loaders.botSettingsById.load(
+          String(bot.current_settings_id),
+        );
+        return s?.dividend_preference ?? null;
+      },
+    }),
+
+    shortInterestSignal: t.field({
+      type: ShortInterestSignalEnum,
+      nullable: true,
+      resolve: async (bot, _args, ctx) => {
+        if (!bot.current_settings_id) return null;
+        const s = await ctx.loaders.botSettingsById.load(
+          String(bot.current_settings_id),
+        );
+        return s?.short_interest_signal ?? null;
+      },
+    }),
+
+    positionSizingMethod: t.field({
+      type: PositionSizingMethodEnum,
+      nullable: true,
+      resolve: async (bot, _args, ctx) => {
+        if (!bot.current_settings_id) return null;
+        const s = await ctx.loaders.botSettingsById.load(
+          String(bot.current_settings_id),
+        );
+        return s?.position_sizing_method ?? null;
+      },
+    }),
+
+    minRrRatio: t.float({
+      nullable: true,
+      resolve: async (bot, _args, ctx) => {
+        if (!bot.current_settings_id) return null;
+        const s = await ctx.loaders.botSettingsById.load(
+          String(bot.current_settings_id),
+        );
+        return s?.min_rr_ratio != null ? Number(s.min_rr_ratio) : null;
+      },
+    }),
+
+    maxDrawdownProtectionPct: t.float({
+      nullable: true,
+      resolve: async (bot, _args, ctx) => {
+        if (!bot.current_settings_id) return null;
+        const s = await ctx.loaders.botSettingsById.load(
+          String(bot.current_settings_id),
+        );
+        return s?.max_drawdown_protection_pct != null
+          ? Number(s.max_drawdown_protection_pct)
+          : null;
+      },
+    }),
+
+    recoveryMode: t.field({
+      type: RecoveryModeEnum,
+      nullable: true,
+      resolve: async (bot, _args, ctx) => {
+        if (!bot.current_settings_id) return null;
+        const s = await ctx.loaders.botSettingsById.load(
+          String(bot.current_settings_id),
+        );
+        return s?.recovery_mode ?? null;
+      },
+    }),
+
+    sessionPreference: t.field({
+      type: SessionPreferenceEnum,
+      nullable: true,
+      resolve: async (bot, _args, ctx) => {
+        if (!bot.current_settings_id) return null;
+        const s = await ctx.loaders.botSettingsById.load(
+          String(bot.current_settings_id),
+        );
+        return s?.session_preference ?? null;
+      },
+    }),
+
+    dayAvoidance: t.field({
+      type: [DayOfWeekEnum],
+      resolve: async (bot, _args, ctx) => {
+        if (!bot.current_settings_id) return [];
+        const s = await ctx.loaders.botSettingsById.load(
+          String(bot.current_settings_id),
+        );
+        if (!s?.day_avoidance) return [];
+        return JSON.parse(s.day_avoidance as string) as (typeof DayOfWeekEnum.$inferType)[];
+      },
+    }),
+
+    volatilityEnvPreference: t.field({
+      type: VolatilityEnvPreferenceEnum,
+      nullable: true,
+      resolve: async (bot, _args, ctx) => {
+        if (!bot.current_settings_id) return null;
+        const s = await ctx.loaders.botSettingsById.load(
+          String(bot.current_settings_id),
+        );
+        return s?.volatility_env_preference ?? null;
+      },
+    }),
+
+    agentBackground: t.string({
+      nullable: true,
+      resolve: async (bot, _args, ctx) => {
+        if (!bot.current_settings_id) return null;
+        const s = await ctx.loaders.botSettingsById.load(
+          String(bot.current_settings_id),
+        );
+        return s?.agent_background ?? null;
+      },
+    }),
+
+    proposalCommunicationStyle: t.field({
+      type: ProposalCommunicationStyleEnum,
+      nullable: true,
+      resolve: async (bot, _args, ctx) => {
+        if (!bot.current_settings_id) return null;
+        const s = await ctx.loaders.botSettingsById.load(
+          String(bot.current_settings_id),
+        );
+        return s?.proposal_communication_style ?? null;
+      },
+    }),
+
+    winReaction: t.string({
+      nullable: true,
+      resolve: async (bot, _args, ctx) => {
+        if (!bot.current_settings_id) return null;
+        const s = await ctx.loaders.botSettingsById.load(
+          String(bot.current_settings_id),
+        );
+        return s?.win_reaction ?? null;
+      },
+    }),
+
+    lossReaction: t.string({
+      nullable: true,
+      resolve: async (bot, _args, ctx) => {
+        if (!bot.current_settings_id) return null;
+        const s = await ctx.loaders.botSettingsById.load(
+          String(bot.current_settings_id),
+        );
+        return s?.loss_reaction ?? null;
       },
     }),
 
