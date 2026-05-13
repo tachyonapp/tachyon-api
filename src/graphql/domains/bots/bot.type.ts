@@ -7,6 +7,17 @@ import {
   CombatPatienceEnum,
   ProposalStatusEnum,
   SectorFilterEnum,
+  ConfidenceThresholdEnum,
+  RegimeAwarenessEnum,
+  EarningsBehaviorEnum,
+  DividendPreferenceEnum,
+  ShortInterestSignalEnum,
+  PositionSizingMethodEnum,
+  RecoveryModeEnum,
+  SessionPreferenceEnum,
+  VolatilityEnvPreferenceEnum,
+  ProposalCommunicationStyleEnum,
+  DayOfWeekEnum,
   type BotFrameName,
 } from "../../types/enums";
 
@@ -24,9 +35,9 @@ const BotBrainConfig = builder.objectRef<{
 
 builder.objectType(BotBrainConfig, {
   fields: (t) => ({
-    brainType:  t.exposeString("brainType"),
-    modelId:    t.exposeString("modelId"),
-    provider:   t.exposeString("provider",   { nullable: true }),
+    brainType: t.exposeString("brainType"),
+    modelId: t.exposeString("modelId"),
+    provider: t.exposeString("provider", { nullable: true }),
     keyPreview: t.exposeString("keyPreview", { nullable: true }),
   }),
 });
@@ -40,14 +51,14 @@ const MarketAwareness = builder.objectRef<{
 
 builder.objectType(MarketAwareness, {
   fields: (t) => ({
-    momentum:      t.exposeFloat("momentum"),
+    momentum: t.exposeFloat("momentum"),
     meanReversion: t.exposeFloat("meanReversion"),
-    volatility:    t.exposeFloat("volatility"),
+    volatility: t.exposeFloat("volatility"),
     trendFollowing: t.exposeFloat("trendFollowing"),
   }),
 });
 
-builder.objectType("Bot", {
+export const BotRef = builder.objectType("Bot", {
   description: "A user-configured AI trading bot",
   fields: (t) => ({
     id: t.exposeID("id"),
@@ -142,9 +153,16 @@ builder.objectType("Bot", {
       nullable: true,
       resolve: async (bot, _args, ctx) => {
         if (!bot.current_settings_id) return null;
-        const s = await ctx.loaders.botSettingsById.load(String(bot.current_settings_id));
+        const s = await ctx.loaders.botSettingsById.load(
+          String(bot.current_settings_id),
+        );
         if (!s?.market_awareness) return null;
-        return s.market_awareness as { momentum: number; meanReversion: number; volatility: number; trendFollowing: number };
+        return s.market_awareness as {
+          momentum: number;
+          meanReversion: number;
+          volatility: number;
+          trendFollowing: number;
+        };
       },
     }),
 
@@ -153,7 +171,9 @@ builder.objectType("Bot", {
       nullable: true,
       resolve: async (bot, _args, ctx) => {
         if (!bot.current_settings_id) return null;
-        const s = await ctx.loaders.botSettingsById.load(String(bot.current_settings_id));
+        const s = await ctx.loaders.botSettingsById.load(
+          String(bot.current_settings_id),
+        );
         if (!s?.sectors) return null;
         // pg returns user-defined enum arrays as "{VAL1,VAL2}" strings rather than JS arrays.
         // Parse defensively to handle both the raw string format and any future auto-parsed arrays.
@@ -161,7 +181,7 @@ builder.objectType("Bot", {
         const arr: string[] = Array.isArray(raw)
           ? (raw as string[])
           : String(raw).replace(/^{|}$/g, "").split(",").filter(Boolean);
-        return arr as typeof SectorFilterEnum.$inferType[];
+        return arr as (typeof SectorFilterEnum.$inferType)[];
       },
     }),
 
@@ -169,7 +189,9 @@ builder.objectType("Bot", {
       nullable: true,
       resolve: async (bot, _args, ctx) => {
         if (!bot.current_settings_id) return null;
-        const s = await ctx.loaders.botSettingsById.load(String(bot.current_settings_id));
+        const s = await ctx.loaders.botSettingsById.load(
+          String(bot.current_settings_id),
+        );
         if (!s?.exit_personality_id) return null;
         const row = await ctx.db
           .selectFrom("exit_personalities")
@@ -184,7 +206,9 @@ builder.objectType("Bot", {
       nullable: true,
       resolve: async (bot, _args, ctx) => {
         if (!bot.current_settings_id) return null;
-        const s = await ctx.loaders.botSettingsById.load(String(bot.current_settings_id));
+        const s = await ctx.loaders.botSettingsById.load(
+          String(bot.current_settings_id),
+        );
         if (!s?.stop_style_id) return null;
         const row = await ctx.db
           .selectFrom("stop_styles")
@@ -192,6 +216,247 @@ builder.objectType("Bot", {
           .where("id", "=", s.stop_style_id)
           .executeTakeFirst();
         return row?.name ?? null;
+      },
+    }),
+
+    // Feature 8b — Advanced Agent Customization fields (all nullable; null for pre-8b bots)
+
+    signalWeights: t.field({
+      type: SignalWeightsOutput,
+      nullable: true,
+      resolve: async (bot, _args, ctx) => {
+        if (!bot.current_settings_id) return null;
+        const s = await ctx.loaders.botSettingsById.load(
+          String(bot.current_settings_id),
+        );
+        if (!s?.signal_weights) return null;
+        return JSON.parse(s.signal_weights as string) as {
+          technicals: number;
+          news: number;
+          fundamentals: number;
+        };
+      },
+    }),
+
+    confidenceThreshold: t.field({
+      type: ConfidenceThresholdEnum,
+      nullable: true,
+      resolve: async (bot, _args, ctx) => {
+        if (!bot.current_settings_id) return null;
+        const s = await ctx.loaders.botSettingsById.load(
+          String(bot.current_settings_id),
+        );
+        return s?.confidence_threshold ?? null;
+      },
+    }),
+
+    regimeAwareness: t.field({
+      type: RegimeAwarenessEnum,
+      nullable: true,
+      resolve: async (bot, _args, ctx) => {
+        if (!bot.current_settings_id) return null;
+        const s = await ctx.loaders.botSettingsById.load(
+          String(bot.current_settings_id),
+        );
+        return s?.regime_awareness ?? null;
+      },
+    }),
+
+    earningsBehavior: t.field({
+      type: EarningsBehaviorEnum,
+      nullable: true,
+      resolve: async (bot, _args, ctx) => {
+        if (!bot.current_settings_id) return null;
+        const s = await ctx.loaders.botSettingsById.load(
+          String(bot.current_settings_id),
+        );
+        return s?.earnings_behavior ?? null;
+      },
+    }),
+
+    subSectors: t.stringList({
+      resolve: async (bot, _args, ctx) => {
+        if (!bot.current_settings_id) return [];
+        const s = await ctx.loaders.botSettingsById.load(
+          String(bot.current_settings_id),
+        );
+        if (!s?.sub_sectors) return [];
+        return JSON.parse(s.sub_sectors as string) as string[];
+      },
+    }),
+
+    customWatchlist: t.stringList({
+      resolve: async (bot, _args, ctx) => {
+        if (!bot.current_settings_id) return [];
+        const s = await ctx.loaders.botSettingsById.load(
+          String(bot.current_settings_id),
+        );
+        if (!s?.custom_watchlist) return [];
+        return JSON.parse(s.custom_watchlist as string) as string[];
+      },
+    }),
+
+    exclusionList: t.stringList({
+      resolve: async (bot, _args, ctx) => {
+        if (!bot.current_settings_id) return [];
+        const s = await ctx.loaders.botSettingsById.load(
+          String(bot.current_settings_id),
+        );
+        if (!s?.exclusion_list) return [];
+        return JSON.parse(s.exclusion_list as string) as string[];
+      },
+    }),
+
+    dividendPreference: t.field({
+      type: DividendPreferenceEnum,
+      nullable: true,
+      resolve: async (bot, _args, ctx) => {
+        if (!bot.current_settings_id) return null;
+        const s = await ctx.loaders.botSettingsById.load(
+          String(bot.current_settings_id),
+        );
+        return s?.dividend_preference ?? null;
+      },
+    }),
+
+    shortInterestSignal: t.field({
+      type: ShortInterestSignalEnum,
+      nullable: true,
+      resolve: async (bot, _args, ctx) => {
+        if (!bot.current_settings_id) return null;
+        const s = await ctx.loaders.botSettingsById.load(
+          String(bot.current_settings_id),
+        );
+        return s?.short_interest_signal ?? null;
+      },
+    }),
+
+    positionSizingMethod: t.field({
+      type: PositionSizingMethodEnum,
+      nullable: true,
+      resolve: async (bot, _args, ctx) => {
+        if (!bot.current_settings_id) return null;
+        const s = await ctx.loaders.botSettingsById.load(
+          String(bot.current_settings_id),
+        );
+        return s?.position_sizing_method ?? null;
+      },
+    }),
+
+    minRrRatio: t.float({
+      nullable: true,
+      resolve: async (bot, _args, ctx) => {
+        if (!bot.current_settings_id) return null;
+        const s = await ctx.loaders.botSettingsById.load(
+          String(bot.current_settings_id),
+        );
+        return s?.min_rr_ratio != null ? Number(s.min_rr_ratio) : null;
+      },
+    }),
+
+    maxDrawdownProtectionPct: t.float({
+      nullable: true,
+      resolve: async (bot, _args, ctx) => {
+        if (!bot.current_settings_id) return null;
+        const s = await ctx.loaders.botSettingsById.load(
+          String(bot.current_settings_id),
+        );
+        return s?.max_drawdown_protection_pct != null
+          ? Number(s.max_drawdown_protection_pct)
+          : null;
+      },
+    }),
+
+    recoveryMode: t.field({
+      type: RecoveryModeEnum,
+      nullable: true,
+      resolve: async (bot, _args, ctx) => {
+        if (!bot.current_settings_id) return null;
+        const s = await ctx.loaders.botSettingsById.load(
+          String(bot.current_settings_id),
+        );
+        return s?.recovery_mode ?? null;
+      },
+    }),
+
+    sessionPreference: t.field({
+      type: SessionPreferenceEnum,
+      nullable: true,
+      resolve: async (bot, _args, ctx) => {
+        if (!bot.current_settings_id) return null;
+        const s = await ctx.loaders.botSettingsById.load(
+          String(bot.current_settings_id),
+        );
+        return s?.session_preference ?? null;
+      },
+    }),
+
+    dayAvoidance: t.field({
+      type: [DayOfWeekEnum],
+      resolve: async (bot, _args, ctx) => {
+        if (!bot.current_settings_id) return [];
+        const s = await ctx.loaders.botSettingsById.load(
+          String(bot.current_settings_id),
+        );
+        if (!s?.day_avoidance) return [];
+        return JSON.parse(s.day_avoidance as string) as (typeof DayOfWeekEnum.$inferType)[];
+      },
+    }),
+
+    volatilityEnvPreference: t.field({
+      type: VolatilityEnvPreferenceEnum,
+      nullable: true,
+      resolve: async (bot, _args, ctx) => {
+        if (!bot.current_settings_id) return null;
+        const s = await ctx.loaders.botSettingsById.load(
+          String(bot.current_settings_id),
+        );
+        return s?.volatility_env_preference ?? null;
+      },
+    }),
+
+    agentBackground: t.string({
+      nullable: true,
+      resolve: async (bot, _args, ctx) => {
+        if (!bot.current_settings_id) return null;
+        const s = await ctx.loaders.botSettingsById.load(
+          String(bot.current_settings_id),
+        );
+        return s?.agent_background ?? null;
+      },
+    }),
+
+    proposalCommunicationStyle: t.field({
+      type: ProposalCommunicationStyleEnum,
+      nullable: true,
+      resolve: async (bot, _args, ctx) => {
+        if (!bot.current_settings_id) return null;
+        const s = await ctx.loaders.botSettingsById.load(
+          String(bot.current_settings_id),
+        );
+        return s?.proposal_communication_style ?? null;
+      },
+    }),
+
+    winReaction: t.string({
+      nullable: true,
+      resolve: async (bot, _args, ctx) => {
+        if (!bot.current_settings_id) return null;
+        const s = await ctx.loaders.botSettingsById.load(
+          String(bot.current_settings_id),
+        );
+        return s?.win_reaction ?? null;
+      },
+    }),
+
+    lossReaction: t.string({
+      nullable: true,
+      resolve: async (bot, _args, ctx) => {
+        if (!bot.current_settings_id) return null;
+        const s = await ctx.loaders.botSettingsById.load(
+          String(bot.current_settings_id),
+        );
+        return s?.loss_reaction ?? null;
       },
     }),
 
@@ -237,9 +502,9 @@ builder.objectType("Bot", {
           .executeTakeFirst();
         if (!config) return null;
         return {
-          brainType:  config.brain_type,
-          modelId:    config.model_id,
-          provider:   config.provider ?? null,
+          brainType: config.brain_type,
+          modelId: config.model_id,
+          provider: config.provider ?? null,
           keyPreview: config.key_preview ?? null,
         };
       },
@@ -254,9 +519,9 @@ builder.objectType("Bot", {
         );
         if (!config) return null;
         return {
-          brainType:  config.brain_type,
-          modelId:    config.model_id,
-          provider:   config.provider ?? null,
+          brainType: config.brain_type,
+          modelId: config.model_id,
+          provider: config.provider ?? null,
           keyPreview: config.key_preview ?? null,
         };
       },
@@ -342,31 +607,73 @@ export const PnlDataPoint =
 builder.objectType(PnlDataPoint, {
   fields: (t) => ({
     date: t.field({ type: "DateTime", resolve: (p) => p.date }),
-    cumulativePnl: t.field({ type: "Decimal", resolve: (p) => p.cumulativePnl.toString() }),
+    cumulativePnl: t.field({
+      type: "Decimal",
+      resolve: (p) => p.cumulativePnl.toString(),
+    }),
   }),
 });
 
-export const BotPerformanceResult =
-  builder.objectRef<BotPerformanceShape>("BotPerformanceResult");
+export const BotPerformanceResult = builder.objectRef<BotPerformanceShape>(
+  "BotPerformanceResult",
+);
 builder.objectType(BotPerformanceResult, {
   fields: (t) => ({
-    totalRealizedPnl:            t.field({ type: "Decimal", resolve: (p) => p.totalRealizedPnl.toString() }),
-    returnOnAllocatedCapitalPct: t.field({ type: "Decimal", resolve: (p) => p.returnOnAllocatedCapitalPct.toString() }),
-    winCount:                    t.int({ resolve: (p) => p.winCount }),
-    lossCount:                   t.int({ resolve: (p) => p.lossCount }),
-    winRatePct:                  t.field({ type: "Decimal", resolve: (p) => p.winRatePct.toString() }),
-    avgGainPerWin:               t.field({ type: "Decimal", resolve: (p) => p.avgGainPerWin.toString() }),
-    avgLossPerLoss:              t.field({ type: "Decimal", resolve: (p) => p.avgLossPerLoss.toString() }),
-    profitFactor:                t.field({ type: "Decimal", resolve: (p) => p.profitFactor.toString() }),
-    largestSingleWin:            t.field({ type: "Decimal", resolve: (p) => p.largestSingleWin.toString() }),
-    largestSingleLoss:           t.field({ type: "Decimal", resolve: (p) => p.largestSingleLoss.toString() }),
-    avgHoldDurationHours:        t.field({ type: "Decimal", resolve: (p) => p.avgHoldDurationHours.toString() }),
-    daysActive:                  t.int({ resolve: (p) => p.daysActive }),
-    totalProposalsGenerated:     t.int({ resolve: (p) => p.totalProposalsGenerated }),
-    totalProposalsApproved:      t.int({ resolve: (p) => p.totalProposalsApproved }),
-    approvalRatePct:             t.field({ type: "Decimal", resolve: (p) => p.approvalRatePct.toString() }),
-    skipRatePct:                 t.field({ type: "Decimal", resolve: (p) => p.skipRatePct.toString() }),
-    pnlTimeSeries:               t.field({ type: [PnlDataPoint], resolve: (p) => p.pnlTimeSeries }),
+    totalRealizedPnl: t.field({
+      type: "Decimal",
+      resolve: (p) => p.totalRealizedPnl.toString(),
+    }),
+    returnOnAllocatedCapitalPct: t.field({
+      type: "Decimal",
+      resolve: (p) => p.returnOnAllocatedCapitalPct.toString(),
+    }),
+    winCount: t.int({ resolve: (p) => p.winCount }),
+    lossCount: t.int({ resolve: (p) => p.lossCount }),
+    winRatePct: t.field({
+      type: "Decimal",
+      resolve: (p) => p.winRatePct.toString(),
+    }),
+    avgGainPerWin: t.field({
+      type: "Decimal",
+      resolve: (p) => p.avgGainPerWin.toString(),
+    }),
+    avgLossPerLoss: t.field({
+      type: "Decimal",
+      resolve: (p) => p.avgLossPerLoss.toString(),
+    }),
+    profitFactor: t.field({
+      type: "Decimal",
+      resolve: (p) => p.profitFactor.toString(),
+    }),
+    largestSingleWin: t.field({
+      type: "Decimal",
+      resolve: (p) => p.largestSingleWin.toString(),
+    }),
+    largestSingleLoss: t.field({
+      type: "Decimal",
+      resolve: (p) => p.largestSingleLoss.toString(),
+    }),
+    avgHoldDurationHours: t.field({
+      type: "Decimal",
+      resolve: (p) => p.avgHoldDurationHours.toString(),
+    }),
+    daysActive: t.int({ resolve: (p) => p.daysActive }),
+    totalProposalsGenerated: t.int({
+      resolve: (p) => p.totalProposalsGenerated,
+    }),
+    totalProposalsApproved: t.int({ resolve: (p) => p.totalProposalsApproved }),
+    approvalRatePct: t.field({
+      type: "Decimal",
+      resolve: (p) => p.approvalRatePct.toString(),
+    }),
+    skipRatePct: t.field({
+      type: "Decimal",
+      resolve: (p) => p.skipRatePct.toString(),
+    }),
+    pnlTimeSeries: t.field({
+      type: [PnlDataPoint],
+      resolve: (p) => p.pnlTimeSeries,
+    }),
   }),
 });
 
@@ -416,3 +723,26 @@ export const ValidateBrainKeyResult = builder.simpleObject(
     }),
   },
 );
+
+export const SignalWeightsOutput = builder.simpleObject("SignalWeightsOutput", {
+  fields: (t) => ({
+    technicals: t.int(),
+    news: t.int(),
+    fundamentals: t.int(),
+  }),
+});
+
+export const MutationAdvisory = builder.simpleObject("MutationAdvisory", {
+  fields: (t) => ({
+    code: t.string(),
+    field: t.string(),
+    message: t.string(),
+  }),
+});
+
+export const BotMutationResult = builder.simpleObject("BotMutationResult", {
+  fields: (t) => ({
+    bot: t.field({ type: BotRef }), // existing Bot reference
+    advisories: t.field({ type: [MutationAdvisory] }),
+  }),
+});

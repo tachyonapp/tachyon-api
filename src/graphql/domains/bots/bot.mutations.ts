@@ -12,6 +12,17 @@ import {
   ExitPersonalityNameEnum,
   StopStyleNameEnum,
   BrainTypeEnum,
+  ConfidenceThresholdEnum,
+  RegimeAwarenessEnum,
+  EarningsBehaviorEnum,
+  DividendPreferenceEnum,
+  ShortInterestSignalEnum,
+  PositionSizingMethodEnum,
+  RecoveryModeEnum,
+  SessionPreferenceEnum,
+  VolatilityEnvPreferenceEnum,
+  ProposalCommunicationStyleEnum,
+  DayOfWeekEnum,
 } from "../../types/enums";
 import { ValidationError, NotFoundError } from "../../types/errors";
 import { GraphQLError } from "graphql";
@@ -27,8 +38,10 @@ import {
   BYOK_PROVIDER_VALIDATION_ENDPOINTS,
   type ByokProvider,
 } from "../../../config/allowedSectors";
-import { FRAME_CONFIG } from "../../../config/frameConfig";
-import { ValidateBrainKeyResult } from "./bot.type";
+import { FRAME_CONFIG, PLATFORM_LIMITS } from "@tachyonapp/tachyon-queue-types";
+import type { FrameAdvisory, FrameDefaults } from "@tachyonapp/tachyon-queue-types";
+import { ValidateBrainKeyResult, BotMutationResult } from "./bot.type";
+import * as Sentry from "@sentry/node";
 
 // ---------------------------------------------------------------------------
 // Input types
@@ -80,6 +93,14 @@ const StopLossStyleInput = builder.inputType("StopLossStyleInput", {
   }),
 });
 
+const SignalWeightsInput = builder.inputType("SignalWeightsInput", {
+  fields: (t) => ({
+    technicals: t.int({ required: true }),
+    news: t.int({ required: true }),
+    fundamentals: t.int({ required: true }),
+  }),
+});
+
 const CreateBotInput = builder.inputType("CreateBotInput", {
   fields: (t) => ({
     // Frame & Identity
@@ -105,7 +126,7 @@ const CreateBotInput = builder.inputType("CreateBotInput", {
     stopLossStyle: t.field({ type: StopLossStyleInput, required: true }),
 
     // Safety systems
-    dailyMaxLossPct: t.field({ type: "Decimal", required: true }), // per-frame bounds enforced in resolver
+    dailyMaxLossPct: t.field({ type: "Decimal", required: true }),
     dailyMaxGain: t.field({ type: "Decimal", required: false }), // optional (USD)
 
     // Emotional controls
@@ -122,6 +143,36 @@ const CreateBotInput = builder.inputType("CreateBotInput", {
 
     // Brain selection
     brain: t.field({ type: BrainConfigInput, required: true }),
+
+    // Feature 8b — Intelligence & Signal Preferences
+    signalWeights: t.field({ type: SignalWeightsInput, required: false }),
+    confidenceThreshold: t.field({ type: ConfidenceThresholdEnum, required: false }),
+    regimeAwareness: t.field({ type: RegimeAwarenessEnum, required: false }),
+    earningsBehavior: t.field({ type: EarningsBehaviorEnum, required: false }),
+
+    // Feature 8b — Sector & Universe Refinement
+    subSectors: t.stringList({ required: false }),
+    customWatchlist: t.stringList({ required: false }),
+    exclusionList: t.stringList({ required: false }),
+    dividendPreference: t.field({ type: DividendPreferenceEnum, required: false }),
+    shortInterestSignal: t.field({ type: ShortInterestSignalEnum, required: false }),
+
+    // Feature 8b — Sizing & Risk Refinement
+    positionSizingMethod: t.field({ type: PositionSizingMethodEnum, required: false }),
+    minRrRatio: t.float({ required: false }),
+    maxDrawdownProtectionPct: t.float({ required: false }),
+    recoveryMode: t.field({ type: RecoveryModeEnum, required: false }),
+
+    // Feature 8b — Timing & Schedule Preferences
+    sessionPreference: t.field({ type: SessionPreferenceEnum, required: false }),
+    dayAvoidance: t.field({ type: [DayOfWeekEnum], required: false }),
+    volatilityEnvPreference: t.field({ type: VolatilityEnvPreferenceEnum, required: false }),
+
+    // Feature 8b — Agent Personality & Voice
+    agentBackground: t.string({ required: false }),
+    proposalCommunicationStyle: t.field({ type: ProposalCommunicationStyleEnum, required: false }),
+    winReaction: t.string({ required: false }),
+    lossReaction: t.string({ required: false }),
   }),
 });
 
@@ -129,11 +180,6 @@ const CreateBotInput = builder.inputType("CreateBotInput", {
 // Result union types
 // Bot is backed by BotsRow — discriminate on `frame_id` (always present on a bot row)
 // ---------------------------------------------------------------------------
-
-const CreateBotResult = builder.unionType("CreateBotResult", {
-  types: ["Bot", ValidationError],
-  resolveType: (value) => ("frame_id" in value ? "Bot" : ValidationError),
-});
 
 const BotResult = builder.unionType("BotResult", {
   types: ["Bot", ValidationError, NotFoundError],
@@ -162,11 +208,10 @@ const DeleteBotResult = builder.simpleObject("DeleteBotResult", {
 
 builder.mutationField("createBot", (t) =>
   t.field({
-    type: CreateBotResult,
+    type: BotMutationResult,
     args: { input: t.arg({ type: CreateBotInput, required: true }) },
     authScopes: { authenticated: true },
     resolve: async (_root, args, ctx) => {
-      // Step 1: Rate limit check
       await withOpRateLimit(
         ctx,
         "createBot",
@@ -176,27 +221,19 @@ builder.mutationField("createBot", (t) =>
 
       const { input } = args;
 
-      // Step 2: Validate name length (max 24 chars)
       if (input.name.length > 24) {
-        return {
-          message: "Bot name must be 24 characters or fewer",
-          field: "name",
-          code: "TOO_LONG",
-        };
+        throw new GraphQLError("Bot name must be 24 characters or fewer", {
+          extensions: { code: "VALIDATION_ERROR", field: "name" },
+        });
       }
 
-      // Step 3: Validate allocationPct range [0.01, 1.00] + per-user ceiling.
-      // The ceiling check sums allocation_pct across the user's existing ACTIVE/PAUSED bots
-      // (the new bot doesn't exist in the DB yet — the transaction is step 15). Users with no
-      // existing bots get existingTotal = 0 safely: executeTakeFirst() returns undefined when
-      // there are no rows, and SUM() on an empty set returns null, both coalesced to "0".
+      // Validate allocationPct range [0.01, 1.00] + per-user ceiling.
+      // SUM() on an empty set returns null — coalesced to "0" safely.
       const allocationPct = parseFloat(input.allocationPct);
       if (allocationPct < 0.01 || allocationPct > 1.0) {
-        return {
-          message: "Allocation must be between 1% and 100%",
-          field: "allocationPct",
-          code: "OUT_OF_BOUNDS",
-        };
+        throw new GraphQLError("Allocation must be between 1% and 100%", {
+          extensions: { code: "VALIDATION_ERROR", field: "allocationPct" },
+        });
       }
 
       const existingAllocationRow = await ctx.db
@@ -208,78 +245,42 @@ builder.mutationField("createBot", (t) =>
 
       const existingTotal = parseFloat(existingAllocationRow?.total ?? "0");
       if (existingTotal + allocationPct > 1.0) {
-        return {
-          message: "Total bot allocation would exceed 100%",
-          field: "allocationPct",
-          code: "ALLOCATION_CEILING_EXCEEDED",
-        };
+        throw new GraphQLError("Total bot allocation would exceed 100%", {
+          extensions: { code: "VALIDATION_ERROR", field: "allocationPct" },
+        });
       }
 
-      // Step 4: Validate dailyMaxLossPct against per-frame bounds from FRAME_CONFIG
       const frameConfig = FRAME_CONFIG[input.frameName];
       const dailyMaxLossPct = parseFloat(input.dailyMaxLossPct);
-      const lossBounds = frameConfig.bounds.dailyMaxLoss;
-      if (
-        dailyMaxLossPct < lossBounds.minPct ||
-        dailyMaxLossPct > lossBounds.maxPct
-      ) {
-        return {
-          message: `${input.frameName} allows ${(lossBounds.minPct * 100).toFixed(0)}%–${(lossBounds.maxPct * 100).toFixed(0)}%`,
-          field: "dailyMaxLossPct",
-          code: "OUT_OF_BOUNDS",
-        };
-      }
 
-      // Step 5: Validate sectors (min 1 item; GraphQL enum type ensures all values are valid)
       if (input.sectors.length < 1) {
-        return {
-          message: "At least one sector must be selected",
-          field: "sectors",
-          code: "MIN_LENGTH",
-        };
+        throw new GraphQLError("At least one sector must be selected", {
+          extensions: { code: "VALIDATION_ERROR", field: "sectors" },
+        });
       }
 
-      // Step 6: Validate all marketAwareness fields in [0.0, 1.0]
       const maInputFields = [
-        {
-          key: "marketAwareness.momentum",
-          value: input.marketAwareness.momentum,
-        },
-        {
-          key: "marketAwareness.meanReversion",
-          value: input.marketAwareness.meanReversion,
-        },
-        {
-          key: "marketAwareness.volatility",
-          value: input.marketAwareness.volatility,
-        },
-        {
-          key: "marketAwareness.trendFollowing",
-          value: input.marketAwareness.trendFollowing,
-        },
+        { key: "marketAwareness.momentum", value: input.marketAwareness.momentum },
+        { key: "marketAwareness.meanReversion", value: input.marketAwareness.meanReversion },
+        { key: "marketAwareness.volatility", value: input.marketAwareness.volatility },
+        { key: "marketAwareness.trendFollowing", value: input.marketAwareness.trendFollowing },
       ] as const;
 
       for (const { key, value } of maInputFields) {
         if (value < 0.0 || value > 1.0) {
-          return {
-            message: `${key} must be between 0.0 and 1.0`,
-            field: key,
-            code: "OUT_OF_BOUNDS",
-          };
+          throw new GraphQLError(`${key} must be between 0.0 and 1.0`, {
+            extensions: { code: "VALIDATION_ERROR", field: key },
+          });
         }
       }
 
-      // Step 7: Validate emotionalControls.freezeAfterLosses in [1, 5] if not null
       const fal = input.emotionalControls.freezeAfterLosses;
       if (fal !== null && fal !== undefined && (fal < 1 || fal > 5)) {
-        return {
-          message: "freezeAfterLosses must be between 1 and 5",
-          field: "emotionalControls.freezeAfterLosses",
-          code: "OUT_OF_BOUNDS",
-        };
+        throw new GraphQLError("freezeAfterLosses must be between 1 and 5", {
+          extensions: { code: "VALIDATION_ERROR", field: "emotionalControls.freezeAfterLosses" },
+        });
       }
 
-      // Step 8: Look up frame from bot_frames table; return error if not found or inactive
       const frame = await ctx.db
         .selectFrom("bot_frames")
         .select("id")
@@ -288,118 +289,32 @@ builder.mutationField("createBot", (t) =>
         .executeTakeFirst();
 
       if (!frame) {
-        return {
-          message: `Bot frame "${input.frameName}" is not available`,
-          field: "frameName",
-          code: "FRAME_NOT_FOUND",
-        };
-      }
-
-      // Step 9: Validate all parameters against FRAME_CONFIG per-frame bounds.
-      // Collect ALL violations (no short-circuit) — mobile needs to surface all errors at once.
-      const bounds = frameConfig.bounds;
-      const violations: Array<{
-        message: string;
-        field: string;
-        code: string;
-      }> = [];
-
-      if (
-        allocationPct < bounds.allocationPct.min ||
-        allocationPct > bounds.allocationPct.max
-      ) {
-        violations.push({
-          message: `${input.frameName} allows allocation between ${(bounds.allocationPct.min * 100).toFixed(0)}%–${(bounds.allocationPct.max * 100).toFixed(0)}%`,
-          field: "allocationPct",
-          code: "OUT_OF_BOUNDS",
+        throw new GraphQLError(`Bot frame "${input.frameName}" is not available`, {
+          extensions: { code: "VALIDATION_ERROR", field: "frameName" },
         });
       }
 
-      if (
-        !(bounds.riskAttitude as readonly string[]).includes(input.riskAttitude)
-      ) {
-        violations.push({
-          message: `${input.frameName} does not allow risk attitude "${input.riskAttitude}"`,
-          field: "riskAttitude",
-          code: "OUT_OF_BOUNDS",
-        });
-      }
-
-      if (
-        !(bounds.tradeTempo as readonly string[]).includes(input.tradeTempo)
-      ) {
-        violations.push({
-          message: `${input.frameName} does not allow trade tempo "${input.tradeTempo}"`,
-          field: "tradeTempo",
-          code: "OUT_OF_BOUNDS",
-        });
-      }
-
-      if (
-        !(bounds.combatPatience as readonly string[]).includes(
-          input.combatPatience,
-        )
-      ) {
-        violations.push({
-          message: `${input.frameName} does not allow combat patience "${input.combatPatience}"`,
-          field: "combatPatience",
-          code: "OUT_OF_BOUNDS",
-        });
-      }
-
-      for (const key of [
-        "momentum",
-        "meanReversion",
-        "volatility",
-        "trendFollowing",
-      ] as const) {
-        const val = input.marketAwareness[key];
-        const bound = bounds.marketAwareness[key];
-        if (val < bound.min || val > bound.max) {
-          violations.push({
-            message: `marketAwareness.${key} must be between ${bound.min} and ${bound.max} for ${input.frameName}`,
-            field: `marketAwareness.${key}`,
-            code: "OUT_OF_BOUNDS",
-          });
-        }
-      }
-
-      if (violations.length > 0) {
-        // Schema supports a single ValidationError — return the first violation found
-        return violations[0]!;
-      }
-
-      // Step 10: BYOK validation — external HTTP call; done after all local checks to avoid
-      // unnecessary network traffic when input is otherwise invalid
+      // BYOK validation — external HTTP call; done after all local checks
       if (input.brain.brainType === "BYOK") {
         const { provider, modelId, apiKey } = input.brain;
 
-        if (
-          !provider ||
-          !(ALLOWED_BYOK_PROVIDERS as readonly string[]).includes(provider)
-        ) {
-          return {
-            message: `Provider "${provider ?? "missing"}" is not supported`,
-            field: "brain.provider",
-            code: "INVALID_PROVIDER",
-          };
+        if (!provider || !(ALLOWED_BYOK_PROVIDERS as readonly string[]).includes(provider)) {
+          throw new GraphQLError(`Provider "${provider ?? "missing"}" is not supported`, {
+            extensions: { code: "VALIDATION_ERROR", field: "brain.provider" },
+          });
         }
 
         const typedProvider = provider as ByokProvider;
         if (!ALLOWED_BYOK_MODELS[typedProvider].includes(modelId)) {
-          return {
-            message: `Model "${modelId}" is not supported for provider "${provider}"`,
-            field: "brain.modelId",
-            code: "INVALID_MODEL",
-          };
+          throw new GraphQLError(`Model "${modelId}" is not supported for provider "${provider}"`, {
+            extensions: { code: "VALIDATION_ERROR", field: "brain.modelId" },
+          });
         }
 
         if (!apiKey) {
-          return {
-            message: "API key is required for BYOK",
-            field: "brain.apiKey",
-            code: "REQUIRED",
-          };
+          throw new GraphQLError("API key is required for BYOK", {
+            extensions: { code: "VALIDATION_ERROR", field: "brain.apiKey" },
+          });
         }
 
         // SSRF guard: validation URL is from server-side allowlist — never constructed from user input
@@ -407,31 +322,25 @@ builder.mutationField("createBot", (t) =>
         try {
           const controller = new AbortController();
           const timeoutId = setTimeout(() => controller.abort(), 5000);
-
           const response = await fetch(validationUrl, {
             headers: { Authorization: `Bearer ${apiKey}` },
             signal: controller.signal,
           });
-
           clearTimeout(timeoutId);
 
           if (!response.ok) {
-            return {
-              message: "API key validation failed",
-              field: "brain.apiKey",
-              code: "BYOK_KEY_INVALID",
-            };
+            throw new GraphQLError("API key validation failed", {
+              extensions: { code: "VALIDATION_ERROR", field: "brain.apiKey" },
+            });
           }
-        } catch {
-          return {
-            message: "API key validation failed",
-            field: "brain.apiKey",
-            code: "BYOK_KEY_INVALID",
-          };
+        } catch (err) {
+          if (err instanceof GraphQLError) throw err;
+          throw new GraphQLError("API key validation failed", {
+            extensions: { code: "VALIDATION_ERROR", field: "brain.apiKey" },
+          });
         }
       }
 
-      // Step 11: Look up exit_personality by name
       const exitPersonality = await ctx.db
         .selectFrom("exit_personalities")
         .select("id")
@@ -440,14 +349,11 @@ builder.mutationField("createBot", (t) =>
         .executeTakeFirst();
 
       if (!exitPersonality) {
-        return {
-          message: `Exit personality "${input.exitPersonality.name}" not found`,
-          field: "exitPersonality",
-          code: "EXIT_PERSONALITY_NOT_FOUND",
-        };
+        throw new GraphQLError(`Exit personality "${input.exitPersonality.name}" not found`, {
+          extensions: { code: "VALIDATION_ERROR", field: "exitPersonality" },
+        });
       }
 
-      // Step 12: Look up stop_style by name
       const stopStyle = await ctx.db
         .selectFrom("stop_styles")
         .select("id")
@@ -456,14 +362,12 @@ builder.mutationField("createBot", (t) =>
         .executeTakeFirst();
 
       if (!stopStyle) {
-        return {
-          message: `Stop style "${input.stopLossStyle.name}" not found`,
-          field: "stopLossStyle",
-          code: "STOP_STYLE_NOT_FOUND",
-        };
+        throw new GraphQLError(`Stop style "${input.stopLossStyle.name}" not found`, {
+          extensions: { code: "VALIDATION_ERROR", field: "stopLossStyle" },
+        });
       }
 
-      // Step 13: Idempotency check — return existing DRAFT bot if same name was created within 60s
+      // Idempotency check — return existing DRAFT bot if same name was created within 60s
       const sixtySecondsAgo = new Date(Date.now() - 60_000);
       const existingDraft = await ctx.db
         .selectFrom("bots")
@@ -475,10 +379,78 @@ builder.mutationField("createBot", (t) =>
         .executeTakeFirst();
 
       if (existingDraft) {
-        return existingDraft;
+        return { bot: existingDraft, advisories: [] };
       }
 
-      // Step 14: Atomic DB transaction — no orphaned records on partial failure
+      // Frame-default resolution — apply frame defaults for any absent advanced field
+      const resolvedSignalWeights = input.signalWeights ?? frameConfig.defaults.signalWeights;
+      const resolvedConfidenceThreshold = input.confidenceThreshold ?? frameConfig.defaults.confidenceThreshold;
+      const resolvedRegimeAwareness = input.regimeAwareness ?? frameConfig.defaults.regimeAwareness;
+      const resolvedEarningsBehavior = input.earningsBehavior ?? frameConfig.defaults.earningsBehavior;
+      const resolvedDividendPreference = input.dividendPreference ?? frameConfig.defaults.dividendPreference;
+      const resolvedShortInterestSignal = input.shortInterestSignal ?? frameConfig.defaults.shortInterestSignal;
+      const resolvedPositionSizingMethod = input.positionSizingMethod ?? frameConfig.defaults.positionSizingMethod;
+      const resolvedMinRrRatio = input.minRrRatio ?? frameConfig.defaults.minRrRatio;
+      const resolvedMaxDrawdownProtectionPct = input.maxDrawdownProtectionPct ?? frameConfig.defaults.maxDrawdownProtectionPct;
+      const resolvedRecoveryMode = input.recoveryMode ?? frameConfig.defaults.recoveryMode;
+      const resolvedSessionPreference = input.sessionPreference ?? frameConfig.defaults.sessionPreference;
+      const resolvedDayAvoidance = input.dayAvoidance ?? frameConfig.defaults.dayAvoidance;
+      const resolvedVolatilityEnvPreference = input.volatilityEnvPreference ?? frameConfig.defaults.volatilityEnvPreference;
+      const resolvedProposalCommunicationStyle = input.proposalCommunicationStyle ?? frameConfig.defaults.proposalCommunicationStyle;
+      const resolvedAgentBackground = input.agentBackground ?? null;
+      const resolvedWinReaction = input.winReaction ?? null;
+      const resolvedLossReaction = input.lossReaction ?? null;
+      const resolvedSubSectors = input.subSectors ?? [];
+      const resolvedCustomWatchlist = input.customWatchlist ?? [];
+      const resolvedExclusionList = input.exclusionList ?? [];
+
+      // PLATFORM_LIMITS hard validation — rejects mutation on any violation
+      if (allocationPct > PLATFORM_LIMITS.allocationPct.max) {
+        throw new GraphQLError("Allocation exceeds platform ceiling", {
+          extensions: { code: "ALLOCATION_EXCEEDS_PLATFORM_CEILING" },
+        });
+      }
+      if (dailyMaxLossPct < PLATFORM_LIMITS.dailyMaxLossPct.min) {
+        throw new GraphQLError("Daily loss below platform floor", {
+          extensions: { code: "DAILY_LOSS_BELOW_PLATFORM_FLOOR" },
+        });
+      }
+      if (input.signalWeights) {
+        const total = input.signalWeights.technicals + input.signalWeights.news + input.signalWeights.fundamentals;
+        if (total !== PLATFORM_LIMITS.signalWeightsTotal) {
+          throw new GraphQLError("Signal weights must total 100", {
+            extensions: { code: "SIGNAL_WEIGHTS_INVALID_TOTAL" },
+          });
+        }
+      }
+      if (resolvedCustomWatchlist.length > PLATFORM_LIMITS.customWatchlistMaxTickers) {
+        throw new GraphQLError("Watchlist exceeds 10 ticker maximum", {
+          extensions: { code: "WATCHLIST_EXCEEDS_MAX" },
+        });
+      }
+      if (resolvedExclusionList.length > PLATFORM_LIMITS.exclusionListMaxTickers) {
+        throw new GraphQLError("Exclusion list exceeds 10 ticker maximum", {
+          extensions: { code: "EXCLUSION_LIST_EXCEEDS_MAX" },
+        });
+      }
+      const overlapTicker = resolvedCustomWatchlist.find((ticker) => resolvedExclusionList.includes(ticker));
+      if (overlapTicker) {
+        throw new GraphQLError("A ticker cannot appear in both watchlist and exclusion list", {
+          extensions: { code: "WATCHLIST_EXCLUSION_OVERLAP" },
+        });
+      }
+      if (resolvedDayAvoidance.length === 5) {
+        throw new GraphQLError("At least one trading day must remain active", {
+          extensions: { code: "ALL_DAYS_AVOIDED" },
+        });
+      }
+      if (resolvedAgentBackground && resolvedAgentBackground.length > PLATFORM_LIMITS.agentBackgroundMaxChars) {
+        throw new GraphQLError("Agent background exceeds 300 character maximum", {
+          extensions: { code: "AGENT_BACKGROUND_EXCEEDS_MAX" },
+        });
+      }
+
+      // Atomic DB transaction — no orphaned records on partial failure
       const botId = await ctx.db.transaction().execute(async (trx) => {
         // a. Insert bot with DRAFT status (circular FK on current_settings_id resolved in step d)
         const newBot = await trx
@@ -508,19 +480,14 @@ builder.mutationField("createBot", (t) =>
             daily_max_loss_pct: input.dailyMaxLossPct,
             daily_max_gain: input.dailyMaxGain ?? "0",
             emotional_controls: JSON.stringify({
-              freezeAfterLosses:
-                input.emotionalControls.freezeAfterLosses ?? null,
-              cooldownAfterVolatility:
-                input.emotionalControls.cooldownAfterVolatility,
-              standDownAfterNoonIfLosing:
-                input.emotionalControls.standDownAfterNoonIfLosing,
+              freezeAfterLosses: input.emotionalControls.freezeAfterLosses ?? null,
+              cooldownAfterVolatility: input.emotionalControls.cooldownAfterVolatility,
+              standDownAfterNoonIfLosing: input.emotionalControls.standDownAfterNoonIfLosing,
             }),
             rules_of_engagement: JSON.stringify({
               oneTradeAtATime: true,
-              overnightHoldAllowed:
-                input.rulesOfEngagement.overnightHoldAllowed,
-              noSameDayExitUnlessStopLoss:
-                input.rulesOfEngagement.noSameDayExitUnlessStopLoss,
+              overnightHoldAllowed: input.rulesOfEngagement.overnightHoldAllowed,
+              noSameDayExitUnlessStopLoss: input.rulesOfEngagement.noSameDayExitUnlessStopLoss,
             }),
             market_awareness: JSON.stringify({
               momentum: input.marketAwareness.momentum,
@@ -530,6 +497,27 @@ builder.mutationField("createBot", (t) =>
             }),
             sectors: input.sectors,
             asset_types: JSON.stringify(["STOCK", "ETF"]),
+            // Feature 8b columns
+            signal_weights: JSON.stringify(resolvedSignalWeights),
+            confidence_threshold: resolvedConfidenceThreshold,
+            regime_awareness: resolvedRegimeAwareness,
+            earnings_behavior: resolvedEarningsBehavior,
+            sub_sectors: resolvedSubSectors.length > 0 ? JSON.stringify(resolvedSubSectors) : null,
+            custom_watchlist: resolvedCustomWatchlist.length > 0 ? JSON.stringify(resolvedCustomWatchlist) : null,
+            exclusion_list: resolvedExclusionList.length > 0 ? JSON.stringify(resolvedExclusionList) : null,
+            dividend_preference: resolvedDividendPreference,
+            short_interest_signal: resolvedShortInterestSignal,
+            position_sizing_method: resolvedPositionSizingMethod,
+            min_rr_ratio: resolvedMinRrRatio,
+            max_drawdown_protection_pct: resolvedMaxDrawdownProtectionPct,
+            recovery_mode: resolvedRecoveryMode,
+            session_preference: resolvedSessionPreference,
+            day_avoidance: resolvedDayAvoidance.length > 0 ? JSON.stringify(resolvedDayAvoidance) : null,
+            volatility_env_preference: resolvedVolatilityEnvPreference,
+            agent_background: resolvedAgentBackground,
+            proposal_communication_style: resolvedProposalCommunicationStyle,
+            win_reaction: resolvedWinReaction,
+            loss_reaction: resolvedLossReaction,
           })
           .returning("id")
           .executeTakeFirstOrThrow();
@@ -571,7 +559,43 @@ builder.mutationField("createBot", (t) =>
         return newBot.id;
       });
 
-      // Step 16: Dispatch SCAN_BOT after transaction commits (fire-and-forget)
+      // Advisory annotation pass — runs after transaction; never fails the mutation
+      let advisories: Array<{ code: string; field: string; message: string }> = [];
+      try {
+        const resolvedSettings = {
+          riskAttitude: input.riskAttitude,
+          tradeTempo: input.tradeTempo,
+          combatPatience: input.combatPatience,
+          signalWeights: resolvedSignalWeights,
+          confidenceThreshold: resolvedConfidenceThreshold,
+          regimeAwareness: resolvedRegimeAwareness,
+          earningsBehavior: resolvedEarningsBehavior,
+          dividendPreference: resolvedDividendPreference,
+          shortInterestSignal: resolvedShortInterestSignal,
+          positionSizingMethod: resolvedPositionSizingMethod,
+          minRrRatio: resolvedMinRrRatio,
+          maxDrawdownProtectionPct: resolvedMaxDrawdownProtectionPct,
+          recoveryMode: resolvedRecoveryMode,
+          sessionPreference: resolvedSessionPreference,
+          dayAvoidance: resolvedDayAvoidance,
+          volatilityEnvPreference: resolvedVolatilityEnvPreference,
+          proposalCommunicationStyle: resolvedProposalCommunicationStyle,
+        };
+        advisories = frameConfig.advisories
+          .filter((advisory: FrameAdvisory) => {
+            try { return advisory.condition(resolvedSettings as Partial<FrameDefaults>); } catch { return false; }
+          })
+          .map((advisory: FrameAdvisory) => ({
+            code: advisory.code,
+            field: advisory.field,
+            message: advisory.message,
+          }));
+      } catch (err) {
+        Sentry.captureException(err);
+        advisories = [];
+      }
+
+      // Dispatch SCAN_BOT after transaction commits (fire-and-forget)
       const scanPayload: ScanBotJobPayload = {
         botId: String(botId),
         userId: ctx.auth!.userId,
@@ -582,12 +606,13 @@ builder.mutationField("createBot", (t) =>
         backoff: { type: "exponential", delay: 2000 },
       });
 
-      // Step 17: Return fully hydrated Bot with status: ACTIVE
-      return ctx.db
+      const bot = await ctx.db
         .selectFrom("bots")
         .selectAll()
         .where("id", "=", botId)
         .executeTakeFirstOrThrow();
+
+      return { bot, advisories };
     },
   }),
 );
