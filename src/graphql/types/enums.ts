@@ -115,3 +115,75 @@ export const SubscriptionTierEnum = builder.enumType("SubscriptionTier", {
 export const SubscriptionStatusEnum = builder.enumType("SubscriptionStatus", {
   values: ["trialing", "active", "past_due", "cancelled", "suspended"] as const,
 });
+
+export const ConfidenceThresholdEnum = builder.enumType("ConfidenceThreshold", {
+  values: ["LOW", "MEDIUM", "HIGH", "VERY_HIGH"] as const,
+});
+
+export const RegimeAwarenessEnum = builder.enumType("RegimeAwareness", {
+  values: [
+    "NO_CHANGE",
+    "REDUCE_SIZE_BEAR",
+    "STAND_DOWN_BEAR",
+    "INCREASE_AGGRESSION_BULL",
+  ] as const,
+});
+
+export const EarningsBehaviorEnum = builder.enumType("EarningsBehavior", {
+  values: ["MORE_AGGRESSIVE", "NEUTRAL", "STAND_DOWN"] as const,
+});
+
+export const DividendPreferenceEnum = builder.enumType("DividendPreference", {
+  values: ["PREFER_DIVIDEND", "NO_PREFERENCE", "EXCLUDE_DIVIDEND"] as const,
+});
+
+export const ShortInterestSignalEnum = builder.enumType("ShortInterestSignal", {
+  values: [
+    "TARGET_SHORT_SQUEEZE",
+    "AVOID_HIGH_SHORT_INTEREST",
+    "IGNORE",
+  ] as const,
+});
+
+export const PositionSizingMethodEnum = builder.enumType(
+  "PositionSizingMethod",
+  {
+    values: ["FIXED_PCT", "VOLATILITY_ADJUSTED", "CONVICTION_SCALED"] as const,
+  },
+);
+
+export const RecoveryModeEnum = builder.enumType("RecoveryMode", {
+  values: ["NORMAL", "MORE_CONSERVATIVE_2D", "STAND_DOWN_1W"] as const,
+});
+
+export const SessionPreferenceEnum = builder.enumType("SessionPreference", {
+  values: [
+    "FULL_SESSION",
+    "MORNING_HUNTER",
+    "AFTERNOON_HUNTER",
+    "AVOID_FIRST_30",
+  ] as const,
+});
+
+export const VolatilityEnvPreferenceEnum = builder.enumType(
+  "VolatilityEnvPreference",
+  {
+    values: ["PREFERS_LOW_VIX", "PREFERS_HIGH_VIX", "NO_PREFERENCE"] as const,
+  },
+);
+
+export const ProposalCommunicationStyleEnum = builder.enumType(
+  "ProposalCommunicationStyle",
+  {
+    values: [
+      "TERSE",
+      "DETAILED",
+      "AGGRESSIVE_CONFIDENT",
+      "CAUTIOUS_MEASURED",
+    ] as const,
+  },
+);
+
+export const DayOfWeekEnum = builder.enumType("DayOfWeek", {
+  values: ["MONDAY", "TUESDAY", "WEDNESDAY", "THURSDAY", "FRIDAY"] as const,
+});

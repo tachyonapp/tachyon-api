@@ -24,9 +24,9 @@ const BotBrainConfig = builder.objectRef<{
 
 builder.objectType(BotBrainConfig, {
   fields: (t) => ({
-    brainType:  t.exposeString("brainType"),
-    modelId:    t.exposeString("modelId"),
-    provider:   t.exposeString("provider",   { nullable: true }),
+    brainType: t.exposeString("brainType"),
+    modelId: t.exposeString("modelId"),
+    provider: t.exposeString("provider", { nullable: true }),
     keyPreview: t.exposeString("keyPreview", { nullable: true }),
   }),
 });
@@ -40,14 +40,14 @@ const MarketAwareness = builder.objectRef<{
 
 builder.objectType(MarketAwareness, {
   fields: (t) => ({
-    momentum:      t.exposeFloat("momentum"),
+    momentum: t.exposeFloat("momentum"),
     meanReversion: t.exposeFloat("meanReversion"),
-    volatility:    t.exposeFloat("volatility"),
+    volatility: t.exposeFloat("volatility"),
     trendFollowing: t.exposeFloat("trendFollowing"),
   }),
 });
 
-builder.objectType("Bot", {
+export const BotRef = builder.objectType("Bot", {
   description: "A user-configured AI trading bot",
   fields: (t) => ({
     id: t.exposeID("id"),
@@ -142,9 +142,16 @@ builder.objectType("Bot", {
       nullable: true,
       resolve: async (bot, _args, ctx) => {
         if (!bot.current_settings_id) return null;
-        const s = await ctx.loaders.botSettingsById.load(String(bot.current_settings_id));
+        const s = await ctx.loaders.botSettingsById.load(
+          String(bot.current_settings_id),
+        );
         if (!s?.market_awareness) return null;
-        return s.market_awareness as { momentum: number; meanReversion: number; volatility: number; trendFollowing: number };
+        return s.market_awareness as {
+          momentum: number;
+          meanReversion: number;
+          volatility: number;
+          trendFollowing: number;
+        };
       },
     }),
 
@@ -153,7 +160,9 @@ builder.objectType("Bot", {
       nullable: true,
       resolve: async (bot, _args, ctx) => {
         if (!bot.current_settings_id) return null;
-        const s = await ctx.loaders.botSettingsById.load(String(bot.current_settings_id));
+        const s = await ctx.loaders.botSettingsById.load(
+          String(bot.current_settings_id),
+        );
         if (!s?.sectors) return null;
         // pg returns user-defined enum arrays as "{VAL1,VAL2}" strings rather than JS arrays.
         // Parse defensively to handle both the raw string format and any future auto-parsed arrays.
@@ -161,7 +170,7 @@ builder.objectType("Bot", {
         const arr: string[] = Array.isArray(raw)
           ? (raw as string[])
           : String(raw).replace(/^{|}$/g, "").split(",").filter(Boolean);
-        return arr as typeof SectorFilterEnum.$inferType[];
+        return arr as (typeof SectorFilterEnum.$inferType)[];
       },
     }),
 
@@ -169,7 +178,9 @@ builder.objectType("Bot", {
       nullable: true,
       resolve: async (bot, _args, ctx) => {
         if (!bot.current_settings_id) return null;
-        const s = await ctx.loaders.botSettingsById.load(String(bot.current_settings_id));
+        const s = await ctx.loaders.botSettingsById.load(
+          String(bot.current_settings_id),
+        );
         if (!s?.exit_personality_id) return null;
         const row = await ctx.db
           .selectFrom("exit_personalities")
@@ -184,7 +195,9 @@ builder.objectType("Bot", {
       nullable: true,
       resolve: async (bot, _args, ctx) => {
         if (!bot.current_settings_id) return null;
-        const s = await ctx.loaders.botSettingsById.load(String(bot.current_settings_id));
+        const s = await ctx.loaders.botSettingsById.load(
+          String(bot.current_settings_id),
+        );
         if (!s?.stop_style_id) return null;
         const row = await ctx.db
           .selectFrom("stop_styles")
@@ -237,9 +250,9 @@ builder.objectType("Bot", {
           .executeTakeFirst();
         if (!config) return null;
         return {
-          brainType:  config.brain_type,
-          modelId:    config.model_id,
-          provider:   config.provider ?? null,
+          brainType: config.brain_type,
+          modelId: config.model_id,
+          provider: config.provider ?? null,
           keyPreview: config.key_preview ?? null,
         };
       },
@@ -254,9 +267,9 @@ builder.objectType("Bot", {
         );
         if (!config) return null;
         return {
-          brainType:  config.brain_type,
-          modelId:    config.model_id,
-          provider:   config.provider ?? null,
+          brainType: config.brain_type,
+          modelId: config.model_id,
+          provider: config.provider ?? null,
           keyPreview: config.key_preview ?? null,
         };
       },
@@ -342,31 +355,73 @@ export const PnlDataPoint =
 builder.objectType(PnlDataPoint, {
   fields: (t) => ({
     date: t.field({ type: "DateTime", resolve: (p) => p.date }),
-    cumulativePnl: t.field({ type: "Decimal", resolve: (p) => p.cumulativePnl.toString() }),
+    cumulativePnl: t.field({
+      type: "Decimal",
+      resolve: (p) => p.cumulativePnl.toString(),
+    }),
   }),
 });
 
-export const BotPerformanceResult =
-  builder.objectRef<BotPerformanceShape>("BotPerformanceResult");
+export const BotPerformanceResult = builder.objectRef<BotPerformanceShape>(
+  "BotPerformanceResult",
+);
 builder.objectType(BotPerformanceResult, {
   fields: (t) => ({
-    totalRealizedPnl:            t.field({ type: "Decimal", resolve: (p) => p.totalRealizedPnl.toString() }),
-    returnOnAllocatedCapitalPct: t.field({ type: "Decimal", resolve: (p) => p.returnOnAllocatedCapitalPct.toString() }),
-    winCount:                    t.int({ resolve: (p) => p.winCount }),
-    lossCount:                   t.int({ resolve: (p) => p.lossCount }),
-    winRatePct:                  t.field({ type: "Decimal", resolve: (p) => p.winRatePct.toString() }),
-    avgGainPerWin:               t.field({ type: "Decimal", resolve: (p) => p.avgGainPerWin.toString() }),
-    avgLossPerLoss:              t.field({ type: "Decimal", resolve: (p) => p.avgLossPerLoss.toString() }),
-    profitFactor:                t.field({ type: "Decimal", resolve: (p) => p.profitFactor.toString() }),
-    largestSingleWin:            t.field({ type: "Decimal", resolve: (p) => p.largestSingleWin.toString() }),
-    largestSingleLoss:           t.field({ type: "Decimal", resolve: (p) => p.largestSingleLoss.toString() }),
-    avgHoldDurationHours:        t.field({ type: "Decimal", resolve: (p) => p.avgHoldDurationHours.toString() }),
-    daysActive:                  t.int({ resolve: (p) => p.daysActive }),
-    totalProposalsGenerated:     t.int({ resolve: (p) => p.totalProposalsGenerated }),
-    totalProposalsApproved:      t.int({ resolve: (p) => p.totalProposalsApproved }),
-    approvalRatePct:             t.field({ type: "Decimal", resolve: (p) => p.approvalRatePct.toString() }),
-    skipRatePct:                 t.field({ type: "Decimal", resolve: (p) => p.skipRatePct.toString() }),
-    pnlTimeSeries:               t.field({ type: [PnlDataPoint], resolve: (p) => p.pnlTimeSeries }),
+    totalRealizedPnl: t.field({
+      type: "Decimal",
+      resolve: (p) => p.totalRealizedPnl.toString(),
+    }),
+    returnOnAllocatedCapitalPct: t.field({
+      type: "Decimal",
+      resolve: (p) => p.returnOnAllocatedCapitalPct.toString(),
+    }),
+    winCount: t.int({ resolve: (p) => p.winCount }),
+    lossCount: t.int({ resolve: (p) => p.lossCount }),
+    winRatePct: t.field({
+      type: "Decimal",
+      resolve: (p) => p.winRatePct.toString(),
+    }),
+    avgGainPerWin: t.field({
+      type: "Decimal",
+      resolve: (p) => p.avgGainPerWin.toString(),
+    }),
+    avgLossPerLoss: t.field({
+      type: "Decimal",
+      resolve: (p) => p.avgLossPerLoss.toString(),
+    }),
+    profitFactor: t.field({
+      type: "Decimal",
+      resolve: (p) => p.profitFactor.toString(),
+    }),
+    largestSingleWin: t.field({
+      type: "Decimal",
+      resolve: (p) => p.largestSingleWin.toString(),
+    }),
+    largestSingleLoss: t.field({
+      type: "Decimal",
+      resolve: (p) => p.largestSingleLoss.toString(),
+    }),
+    avgHoldDurationHours: t.field({
+      type: "Decimal",
+      resolve: (p) => p.avgHoldDurationHours.toString(),
+    }),
+    daysActive: t.int({ resolve: (p) => p.daysActive }),
+    totalProposalsGenerated: t.int({
+      resolve: (p) => p.totalProposalsGenerated,
+    }),
+    totalProposalsApproved: t.int({ resolve: (p) => p.totalProposalsApproved }),
+    approvalRatePct: t.field({
+      type: "Decimal",
+      resolve: (p) => p.approvalRatePct.toString(),
+    }),
+    skipRatePct: t.field({
+      type: "Decimal",
+      resolve: (p) => p.skipRatePct.toString(),
+    }),
+    pnlTimeSeries: t.field({
+      type: [PnlDataPoint],
+      resolve: (p) => p.pnlTimeSeries,
+    }),
   }),
 });
 
@@ -416,3 +471,26 @@ export const ValidateBrainKeyResult = builder.simpleObject(
     }),
   },
 );
+
+export const SignalWeightsOutput = builder.simpleObject("SignalWeightsOutput", {
+  fields: (t) => ({
+    technicals: t.int(),
+    news: t.int(),
+    fundamentals: t.int(),
+  }),
+});
+
+export const MutationAdvisory = builder.simpleObject("MutationAdvisory", {
+  fields: (t) => ({
+    code: t.string(),
+    field: t.string(),
+    message: t.string(),
+  }),
+});
+
+export const BotMutationResult = builder.simpleObject("BotMutationResult", {
+  fields: (t) => ({
+    bot: t.field({ type: BotRef }), // existing Bot reference
+    advisories: t.field({ type: [MutationAdvisory] }),
+  }),
+});
