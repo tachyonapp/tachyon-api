@@ -29,29 +29,49 @@ interface BaseError {
 """A user-configured AI trading bot"""
 type Bot {
   activePosition: Position
+  agentBackground: String
   allocationPct: Decimal
   avatarSeed: String
   botBrainConfig: BotBrainConfig
   brain: BotBrainConfig
   combatPatience: CombatPatience
+  confidenceThreshold: ConfidenceThreshold
   createdAt: DateTime
+  customWatchlist: [String!]
   dailyMaxGain: Decimal
   dailyMaxLoss: Decimal
+  dayAvoidance: [DayOfWeek!]
+  dividendPreference: DividendPreference
+  earningsBehavior: EarningsBehavior
+  exclusionList: [String!]
   exitStyle: String
   frame: BotFrame
   id: ID
+  lossReaction: String
   marketAwareness: MarketAwareness
+  maxDrawdownProtectionPct: Float
+  minRrRatio: Float
   name: String
   owner: User
+  positionSizingMethod: PositionSizingMethod
+  proposalCommunicationStyle: ProposalCommunicationStyle
   proposals(status: ProposalStatus): [Proposal!]
+  recoveryMode: RecoveryMode
+  regimeAwareness: RegimeAwareness
   riskAttitude: RiskAttitude
   scanCapRemaining: Int
   scanCapUsed: Int
   sectors: [SectorFilter!]
+  sessionPreference: SessionPreference
+  shortInterestSignal: ShortInterestSignal
+  signalWeights: SignalWeightsOutput
   status: BotStatus
   stopStyle: String
+  subSectors: [String!]
   tradeTempo: TradeTempo
   updatedAt: DateTime
+  volatilityEnvPreference: VolatilityEnvPreference
+  winReaction: String
 }
 
 type BotBrainConfig {
@@ -68,6 +88,11 @@ enum BotFrame {
   GUARDIAN
   SCOUT
   SNIPER
+}
+
+type BotMutationResult {
+  advisories: [MutationAdvisory!]
+  bot: Bot
 }
 
 type BotPerformanceResult {
@@ -149,31 +174,64 @@ enum CombatPatience {
   STRATEGIC
 }
 
+enum ConfidenceThreshold {
+  HIGH
+  LOW
+  MEDIUM
+  VERY_HIGH
+}
+
 union ConnectBrokerResult = Account | ValidationError
 
 input CreateBotInput {
+  agentBackground: String
   allocationPct: Decimal!
   avatarSeed: String!
   brain: BrainConfigInput!
   colorway: String!
   combatPatience: CombatPatience!
+  confidenceThreshold: ConfidenceThreshold
+  customWatchlist: [String!]
   dailyMaxGain: Decimal
   dailyMaxLossPct: Decimal!
+  dayAvoidance: [DayOfWeek!]
+  dividendPreference: DividendPreference
+  earningsBehavior: EarningsBehavior
   emotionalControls: EmotionalControlsInput!
+  exclusionList: [String!]
   exitPersonality: ExitPersonalityInput!
   frameName: BotFrame!
+  lossReaction: String
   marketAwareness: MarketAwarenessInput!
+  maxDrawdownProtectionPct: Float
+  minRrRatio: Float
   name: String!
+  positionSizingMethod: PositionSizingMethod
+  proposalCommunicationStyle: ProposalCommunicationStyle
+  recoveryMode: RecoveryMode
+  regimeAwareness: RegimeAwareness
   riskAttitude: RiskAttitude!
   rulesOfEngagement: RulesOfEngagementInput!
   sectors: [SectorFilter!]!
+  sessionPreference: SessionPreference
+  shortInterestSignal: ShortInterestSignal
+  signalWeights: SignalWeightsInput
   stopLossStyle: StopLossStyleInput!
+  subSectors: [String!]
   tradeTempo: TradeTempo!
+  volatilityEnvPreference: VolatilityEnvPreference
+  winReaction: String
 }
 
-union CreateBotResult = Bot | ValidationError
-
 scalar DateTime
+
+enum DayOfWeek {
+  FRIDAY
+  MONDAY
+  THURSDAY
+  TUESDAY
+  WEDNESDAY
+}
 
 scalar Decimal
 
@@ -187,6 +245,18 @@ type DefaultBrainInfo {
 
 type DeleteBotResult {
   success: Boolean
+}
+
+enum DividendPreference {
+  EXCLUDE_DIVIDEND
+  NO_PREFERENCE
+  PREFER_DIVIDEND
+}
+
+enum EarningsBehavior {
+  MORE_AGGRESSIVE
+  NEUTRAL
+  STAND_DOWN
 }
 
 input EmotionalControlsInput {
@@ -227,13 +297,19 @@ type Mutation {
   """Mark the authenticated user's FTUE as complete. Idempotent."""
   completeOnboarding: Boolean
   connectBroker(brokerName: String!, credentials: String!): ConnectBrokerResult
-  createBot(input: CreateBotInput!): CreateBotResult
+  createBot(input: CreateBotInput!): BotMutationResult
   deleteBot(id: ID!): DeleteBotResult
   pauseBot(id: ID!): BotResult
   selectTier(stripePaymentMethodId: String, tier: SubscriptionTier!): SelectTierResult
   skipProposal(id: ID!): SkipProposalResult
   updateBotIdentity(id: ID!, input: UpdateBotIdentityInput!): UpdateBotIdentityResult
   validateBrainKey(apiKey: String!, provider: String!): ValidateBrainKeyResult
+}
+
+type MutationAdvisory {
+  code: String
+  field: String
+  message: String
 }
 
 type NotFoundError implements BaseError {
@@ -263,6 +339,12 @@ type Position {
   symbol: String
 }
 
+enum PositionSizingMethod {
+  CONVICTION_SCALED
+  FIXED_PCT
+  VOLATILITY_ADJUSTED
+}
+
 enum PositionStatus {
   CLOSED
   OPEN
@@ -287,6 +369,13 @@ type Proposal {
   targetPrice: Decimal
 }
 
+enum ProposalCommunicationStyle {
+  AGGRESSIVE_CONFIDENT
+  CAUTIOUS_MEASURED
+  DETAILED
+  TERSE
+}
+
 enum ProposalSide {
   BUY
   SELL
@@ -308,8 +397,22 @@ type Query {
   bots: [Bot!]
   brainProviders: BrainCatalog
   me: User
+  parentSectors: [SectorDefinition!]!
   positions: [Position!]
   proposals(status: ProposalStatus): [Proposal!]
+}
+
+enum RecoveryMode {
+  MORE_CONSERVATIVE_2D
+  NORMAL
+  STAND_DOWN_1W
+}
+
+enum RegimeAwareness {
+  INCREASE_AGGRESSION_BULL
+  NO_CHANGE
+  REDUCE_SIZE_BEAR
+  STAND_DOWN_BEAR
 }
 
 enum RiskAttitude {
@@ -321,6 +424,11 @@ enum RiskAttitude {
 input RulesOfEngagementInput {
   noSameDayExitUnlessStopLoss: Boolean!
   overnightHoldAllowed: Boolean!
+}
+
+type SectorDefinition {
+  parentSector: String
+  subSectors: [String!]
 }
 
 enum SectorFilter {
@@ -338,6 +446,31 @@ type SelectTierResult {
   subscriptionStatus: SubscriptionStatus
   subscriptionTier: SubscriptionTier
   trialExpiresAt: DateTime
+}
+
+enum SessionPreference {
+  AFTERNOON_HUNTER
+  AVOID_FIRST_30
+  FULL_SESSION
+  MORNING_HUNTER
+}
+
+enum ShortInterestSignal {
+  AVOID_HIGH_SHORT_INTEREST
+  IGNORE
+  TARGET_SHORT_SQUEEZE
+}
+
+input SignalWeightsInput {
+  fundamentals: Int!
+  news: Int!
+  technicals: Int!
+}
+
+type SignalWeightsOutput {
+  fundamentals: Int
+  news: Int
+  technicals: Int
 }
 
 union SkipProposalResult = AuthError | NotFoundError | Proposal
@@ -410,4 +543,10 @@ type ValidationError implements BaseError {
   code: String
   field: String
   message: String
+}
+
+enum VolatilityEnvPreference {
+  NO_PREFERENCE
+  PREFERS_HIGH_VIX
+  PREFERS_LOW_VIX
 }
