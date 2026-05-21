@@ -21,7 +21,6 @@ builder.queryField("parentSectors", (t) =>
   t.field({
     type: [SectorDefinitionType],
     nullable: false,
-    authScopes: {},
     resolve: () => ALLOWED_SECTORS,
   }),
 );
