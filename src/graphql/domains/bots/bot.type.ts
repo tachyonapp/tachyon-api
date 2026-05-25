@@ -399,7 +399,9 @@ export const BotRef = builder.objectType("Bot", {
           String(bot.current_settings_id),
         );
         if (!s?.day_avoidance) return [];
-        return JSON.parse(s.day_avoidance as string) as (typeof DayOfWeekEnum.$inferType)[];
+        return JSON.parse(
+          s.day_avoidance as string,
+        ) as (typeof DayOfWeekEnum.$inferType)[];
       },
     }),
 
@@ -530,11 +532,9 @@ export const BotRef = builder.objectType("Bot", {
     scanCapUsed: t.int({
       nullable: true,
       resolve: async (bot, _args, ctx) => {
-        const runtime = await ctx.db
-          .selectFrom("bot_runtime_data")
-          .where("bot_id", "=", bot.id)
-          .select("ai_calls_today")
-          .executeTakeFirst();
+        const runtime = await ctx.loaders.botRuntimeDataByBotId.load(
+          String(bot.id),
+        );
         return runtime?.ai_calls_today ?? 0;
       },
     }),
@@ -543,18 +543,13 @@ export const BotRef = builder.objectType("Bot", {
       nullable: true,
       resolve: async (bot, _args, ctx) => {
         const [runtime, sub] = await Promise.all([
-          ctx.db
-            .selectFrom("bot_runtime_data")
-            .where("bot_id", "=", bot.id)
-            .select("ai_calls_today")
-            .executeTakeFirst(),
+          ctx.loaders.botRuntimeDataByBotId.load(String(bot.id)),
           ctx.db
             .selectFrom("user_subscriptions")
             .where("user_id", "=", bot.user_id)
             .select("tier")
             .executeTakeFirst(),
         ]);
-
         if (!sub) return null;
         const used = runtime?.ai_calls_today ?? 0;
         if (sub.tier === "FREE_TRIAL") return Math.max(0, 40 - used);

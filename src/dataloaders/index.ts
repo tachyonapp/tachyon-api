@@ -19,6 +19,7 @@
  */
 import DataLoader from "dataloader";
 import type { Kysely } from "kysely";
+import { sql } from "kysely";
 import type {
   DB,
   UsersRow,
@@ -27,11 +28,25 @@ import type {
   ProposalsRow,
   PositionsRow,
   BotBrainConfigsRow,
+  BotRuntimeDataRow,
 } from "@tachyonapp/tachyon-db";
 
 type BotBrainConfigPartial = Pick<
   BotBrainConfigsRow,
-  "bot_id" | "brain_type" | "model_id" | "provider" | "key_preview"
+  | "bot_id"
+  | "brain_type"
+  | "model_id"
+  | "provider"
+  | "key_preview"
+  | "openai_model_variant"
+  | "anthropic_model_variant"
+  | "groq_model_variant"
+  | "gemini_model_variant"
+>;
+
+type BotRuntimeDataPartial = Pick<
+  BotRuntimeDataRow,
+  "bot_id" | "ai_calls_today" | "trading_day"
 >;
 
 export interface DataLoaders {
@@ -42,6 +57,7 @@ export interface DataLoaders {
   proposalsByBotId: DataLoader<string, ProposalsRow[]>;
   positionByBotId: DataLoader<string, PositionsRow | null>;
   botBrainConfigByBotId: DataLoader<string, BotBrainConfigPartial | null>;
+  botRuntimeDataByBotId: DataLoader<string, BotRuntimeDataPartial | null>;
 }
 
 /**
@@ -103,10 +119,27 @@ export function createDataLoaders(db: Kysely<DB>): DataLoaders {
             "model_id",
             "provider",
             "key_preview",
+            "openai_model_variant",
+            "anthropic_model_variant",
+            "groq_model_variant",
+            "gemini_model_variant",
           ])
           // NEVER select encrypted_key
           .execute();
 
+        const map = new Map(rows.map((r) => [String(r.bot_id), r]));
+        return botIds.map((id) => map.get(id) ?? null);
+      },
+    ),
+
+    botRuntimeDataByBotId: new DataLoader<string, BotRuntimeDataPartial | null>(
+      async (botIds) => {
+        const rows = await db
+          .selectFrom("bot_runtime_data")
+          .select(["bot_id", "ai_calls_today", "trading_day"])
+          .where("bot_id", "in", botIds as string[])
+          .where(sql<boolean>`trading_day = CURRENT_DATE`)
+          .execute();
         const map = new Map(rows.map((r) => [String(r.bot_id), r]));
         return botIds.map((id) => map.get(id) ?? null);
       },
