@@ -16,7 +16,8 @@ export const OP_RATE_LIMITS: Record<
   pauseBot: { limit: 10, windowSeconds: 60 },
   connectBroker: { limit: 3, windowSeconds: 3600 },
   botPerformance: { limit: 20, windowSeconds: 60 },
-  updateBotIdentity: { limit: 10, windowSeconds: 60 },
+  updateAgentIdentity: { limit: 10, windowSeconds: 60 },  // RENAMED from updateBotIdentity
+  updateBotBrain: { limit: 10, windowSeconds: 60 },       // NEW (used by Task 5)
   selectTier: { limit: 3, windowSeconds: 3600 },
   cancelSubscription: { limit: 3, windowSeconds: 3600 },
 };

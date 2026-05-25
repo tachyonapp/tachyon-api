@@ -38,7 +38,12 @@ import {
   BYOK_PROVIDER_VALIDATION_ENDPOINTS,
   type ByokProvider,
 } from "../../../config/allowedSectors";
-import { FRAME_CONFIG, PLATFORM_LIMITS } from "@tachyonapp/tachyon-queue-types";
+import {
+  FRAME_CONFIG,
+  PLATFORM_LIMITS,
+  WIN_REACTION_PRESETS,
+  LOSS_REACTION_PRESETS,
+} from "@tachyonapp/tachyon-queue-types";
 import type { FrameAdvisory, FrameDefaults } from "@tachyonapp/tachyon-queue-types";
 import { ValidateBrainKeyResult, BotMutationResult } from "./bot.type";
 import * as Sentry from "@sentry/node";
@@ -805,20 +810,24 @@ builder.mutationField("deleteBot", (t) =>
 // ---------------------------------------------------------------------------
 
 // ---------------------------------------------------------------------------
-// updateBotIdentity
+// updateAgentIdentity
 // ---------------------------------------------------------------------------
 
-const UpdateBotIdentityInput = builder.inputType("UpdateBotIdentityInput", {
+const UpdateAgentIdentityInput = builder.inputType("UpdateAgentIdentityInput", {
   fields: (t) => ({
     name: t.string({ required: true }),
     avatarSeed: t.string({ required: true }),
+    backstory: t.string({ required: false }),
+    communicationStyle: t.field({ type: ProposalCommunicationStyleEnum, required: false }),
+    winReaction: t.string({ required: false }),
+    lossReaction: t.string({ required: false }),
   }),
 });
 
-const UpdateBotIdentityResult = builder.objectRef<{ bot: BotsRow }>(
-  "UpdateBotIdentityResult",
+const UpdateAgentIdentityResult = builder.objectRef<{ bot: BotsRow }>(
+  "UpdateAgentIdentityResult",
 );
-builder.objectType(UpdateBotIdentityResult, {
+builder.objectType(UpdateAgentIdentityResult, {
   fields: (t) => ({
     bot: t.field({
       type: "Bot",
@@ -827,20 +836,20 @@ builder.objectType(UpdateBotIdentityResult, {
   }),
 });
 
-builder.mutationField("updateBotIdentity", (t) =>
+builder.mutationField("updateAgentIdentity", (t) =>
   t.field({
-    type: UpdateBotIdentityResult,
+    type: UpdateAgentIdentityResult,
     args: {
       id: t.arg.id({ required: true }),
-      input: t.arg({ type: UpdateBotIdentityInput, required: true }),
+      input: t.arg({ type: UpdateAgentIdentityInput, required: true }),
     },
     authScopes: { authenticated: true },
     resolve: async (_root, { id, input }, ctx) => {
       await withOpRateLimit(
         ctx,
-        "updateBotIdentity",
-        OP_RATE_LIMITS.updateBotIdentity.limit,
-        OP_RATE_LIMITS.updateBotIdentity.windowSeconds,
+        "updateAgentIdentity",
+        OP_RATE_LIMITS.updateAgentIdentity.limit,
+        OP_RATE_LIMITS.updateAgentIdentity.windowSeconds,
       );
 
       if (input.name.length > 24) {
@@ -849,10 +858,32 @@ builder.mutationField("updateBotIdentity", (t) =>
         });
       }
 
+      if (input.backstory !== null && input.backstory !== undefined && input.backstory.length > 300) {
+        throw new GraphQLError("Backstory must be 300 characters or fewer", {
+          extensions: { code: "VALIDATION_ERROR", field: "backstory" },
+        });
+      }
+
+      if (input.winReaction !== null && input.winReaction !== undefined) {
+        if (!WIN_REACTION_PRESETS.includes(input.winReaction)) {
+          throw new GraphQLError("Win reaction must be one of the allowed preset values", {
+            extensions: { code: "VALIDATION_ERROR", field: "winReaction" },
+          });
+        }
+      }
+
+      if (input.lossReaction !== null && input.lossReaction !== undefined) {
+        if (!LOSS_REACTION_PRESETS.includes(input.lossReaction)) {
+          throw new GraphQLError("Loss reaction must be one of the allowed preset values", {
+            extensions: { code: "VALIDATION_ERROR", field: "lossReaction" },
+          });
+        }
+      }
+
       const bot = await ctx.db
         .selectFrom("bots")
         .where("id", "=", id)
-        .select(["id", "user_id"])
+        .select(["id", "user_id", "current_settings_id"])
         .executeTakeFirst();
 
       if (!bot) {
@@ -863,14 +894,89 @@ builder.mutationField("updateBotIdentity", (t) =>
 
       assertOwnership(ctx, String(bot.user_id));
 
+      const updated = await ctx.db.transaction().execute(async (trx) => {
+        const updatedBot = await trx
+          .updateTable("bots")
+          .set({
+            name: input.name,
+            avatar_seed: input.avatarSeed,
+            updated_at: new Date(),
+          })
+          .where("id", "=", id)
+          .returningAll()
+          .executeTakeFirstOrThrow();
+
+        const hasPersonalityFields =
+          (input.backstory !== null && input.backstory !== undefined) ||
+          (input.communicationStyle !== null && input.communicationStyle !== undefined) ||
+          (input.winReaction !== null && input.winReaction !== undefined) ||
+          (input.lossReaction !== null && input.lossReaction !== undefined);
+
+        if (hasPersonalityFields && bot.current_settings_id) {
+          const settingsUpdate: Record<string, unknown> = {};
+          if (input.backstory !== undefined) settingsUpdate.agent_background = input.backstory;
+          if (input.communicationStyle !== undefined) settingsUpdate.proposal_communication_style = input.communicationStyle;
+          if (input.winReaction !== undefined) settingsUpdate.win_reaction = input.winReaction;
+          if (input.lossReaction !== undefined) settingsUpdate.loss_reaction = input.lossReaction;
+
+          await trx
+            .updateTable("bot_settings")
+            .set(settingsUpdate)
+            .where("id", "=", bot.current_settings_id)
+            .execute();
+        }
+
+        return updatedBot;
+      });
+
+      return { bot: updated };
+    },
+  }),
+);
+
+// Deprecated alias — kept until mobile app version with updateAgentIdentity has fully
+// rolled out (≥95% of users). Remove in Task 15. Do not modify behavior.
+// Old mobile clients send updateBotIdentity with {name, avatarSeed} only.
+builder.mutationField("updateBotIdentity", (t) =>
+  t.field({
+    type: UpdateAgentIdentityResult,
+    args: {
+      id: t.arg.id({ required: true }),
+      input: t.arg({ type: UpdateAgentIdentityInput, required: true }),
+    },
+    authScopes: { authenticated: true },
+    resolve: async (_root, args, ctx) => {
+      // Delegate entirely to updateAgentIdentity resolver logic.
+      // Old clients only send name + avatarSeed; personality fields will be undefined and skipped.
+      await withOpRateLimit(
+        ctx,
+        "updateAgentIdentity",   // intentionally uses the new key — same bucket
+        OP_RATE_LIMITS.updateAgentIdentity.limit,
+        OP_RATE_LIMITS.updateAgentIdentity.windowSeconds,
+      );
+
+      if (args.input.name.length > 24) {
+        throw new GraphQLError("Bot name must be 24 characters or fewer", {
+          extensions: { code: "VALIDATION_ERROR", field: "name" },
+        });
+      }
+
+      const bot = await ctx.db
+        .selectFrom("bots")
+        .where("id", "=", args.id)
+        .select(["id", "user_id"])
+        .executeTakeFirst();
+
+      if (!bot) {
+        throw new GraphQLError("Bot not found", { extensions: { code: "NOT_FOUND" } });
+      }
+
+      assertOwnership(ctx, String(bot.user_id));
+
       const updated = await ctx.db
         .updateTable("bots")
-        .set({
-          name: input.name,
-          avatar_seed: input.avatarSeed,
-          updated_at: new Date(),
-        })
-        .where("id", "=", id)
+        .set({ name: args.input.name, avatar_seed: args.input.avatarSeed, updated_at: new Date() })
+        .where("id", "=", args.id)
         .returningAll()
         .executeTakeFirstOrThrow();
 
