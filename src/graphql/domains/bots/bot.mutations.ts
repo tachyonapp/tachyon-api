@@ -985,6 +985,182 @@ builder.mutationField("updateBotIdentity", (t) =>
   }),
 );
 
+// ---------------------------------------------------------------------------
+// updateBotBrain — model variant update for BYOK agents (4 providers)
+// ---------------------------------------------------------------------------
+
+const UpdateBotBrainInput = builder.inputType("UpdateBotBrainInput", {
+  fields: (t) => ({
+    modelVariant: t.string({ required: true }),
+    // Allowed values per provider:
+    //   openai:    'gpt-4o' | 'gpt-4o-mini'
+    //   anthropic: 'sonnet' | 'opus'  (haiku is reserved for TACHYON_HOSTED — rejected)
+    //   groq:      'llama-4-scout' | 'llama-4-maverick' | 'llama-3.3-70b'
+    //   gemini:    'gemini-2.0-flash' | 'gemini-2.5-flash'
+  }),
+});
+
+const UpdateBotBrainResult = builder.objectRef<{ bot: BotsRow }>("UpdateBotBrainResult");
+builder.objectType(UpdateBotBrainResult, {
+  fields: (t) => ({
+    bot: t.field({ type: "Bot", resolve: (r) => r.bot }),
+  }),
+});
+
+const VALID_OPENAI_VARIANTS    = new Set(["gpt-4o", "gpt-4o-mini"]);
+const VALID_ANTHROPIC_VARIANTS = new Set(["sonnet", "opus"]); // haiku excluded — TACHYON_HOSTED only
+const VALID_GROQ_VARIANTS      = new Set(["llama-4-scout", "llama-4-maverick", "llama-3.3-70b"]);
+const VALID_GEMINI_VARIANTS    = new Set(["gemini-2.0-flash", "gemini-2.5-flash"]);
+
+builder.mutationField("updateBotBrain", (t) =>
+  t.field({
+    type: UpdateBotBrainResult,
+    args: {
+      id: t.arg.id({ required: true }),
+      input: t.arg({ type: UpdateBotBrainInput, required: true }),
+    },
+    authScopes: { authenticated: true },
+    resolve: async (_root, { id, input }, ctx) => {
+      await withOpRateLimit(
+        ctx,
+        "updateBotBrain",
+        OP_RATE_LIMITS.updateBotBrain.limit,
+        OP_RATE_LIMITS.updateBotBrain.windowSeconds,
+      );
+
+      const bot = await ctx.db
+        .selectFrom("bots")
+        .where("id", "=", id)
+        .where("status", "!=", "ARCHIVED")
+        .select(["id", "user_id"])
+        .executeTakeFirst();
+
+      if (!bot) {
+        throw new GraphQLError("Bot not found", { extensions: { code: "NOT_FOUND" } });
+      }
+
+      assertOwnership(ctx, String(bot.user_id));
+
+      const brainConfig = await ctx.db
+        .selectFrom("bot_brain_configs")
+        .where("bot_id", "=", id)
+        .where("is_active", "=", true)
+        .select(["brain_type", "provider"])
+        .executeTakeFirst();
+
+      if (!brainConfig) {
+        throw new GraphQLError("No active brain config found for this bot", {
+          extensions: { code: "NOT_FOUND" },
+        });
+      }
+
+      if (brainConfig.brain_type === "TACHYON_HOSTED") {
+        throw new GraphQLError(
+          "Model variant selection is not available for Tachyon-Hosted agents",
+          { extensions: { code: "VALIDATION_ERROR", field: "modelVariant" } },
+        );
+      }
+
+      const { modelVariant } = input;
+      if (modelVariant === "haiku") {
+        throw new GraphQLError(
+          "haiku is reserved for Tachyon-Hosted agents and cannot be selected as a BYOK variant",
+          { extensions: { code: "VALIDATION_ERROR", field: "modelVariant" } },
+        );
+      }
+
+      const provider = brainConfig.provider;
+
+      if (provider === "openai") {
+        if (!VALID_OPENAI_VARIANTS.has(modelVariant)) {
+          throw new GraphQLError(
+            "Model variant incompatible with configured provider",
+            { extensions: { code: "VALIDATION_ERROR", field: "modelVariant" } },
+          );
+        }
+        await ctx.db
+          .updateTable("bot_brain_configs")
+          .set({
+            openai_model_variant:    modelVariant,
+            anthropic_model_variant: null,
+            groq_model_variant:      null,
+            gemini_model_variant:    null,
+          })
+          .where("bot_id", "=", id)
+          .where("is_active", "=", true)
+          .execute();
+      } else if (provider === "anthropic") {
+        if (!VALID_ANTHROPIC_VARIANTS.has(modelVariant)) {
+          throw new GraphQLError(
+            "Model variant incompatible with configured provider",
+            { extensions: { code: "VALIDATION_ERROR", field: "modelVariant" } },
+          );
+        }
+        await ctx.db
+          .updateTable("bot_brain_configs")
+          .set({
+            anthropic_model_variant: modelVariant,
+            openai_model_variant:    null,
+            groq_model_variant:      null,
+            gemini_model_variant:    null,
+          })
+          .where("bot_id", "=", id)
+          .where("is_active", "=", true)
+          .execute();
+      } else if (provider === "groq") {
+        if (!VALID_GROQ_VARIANTS.has(modelVariant)) {
+          throw new GraphQLError(
+            "Model variant incompatible with configured provider",
+            { extensions: { code: "VALIDATION_ERROR", field: "modelVariant" } },
+          );
+        }
+        await ctx.db
+          .updateTable("bot_brain_configs")
+          .set({
+            groq_model_variant:      modelVariant,
+            openai_model_variant:    null,
+            anthropic_model_variant: null,
+            gemini_model_variant:    null,
+          })
+          .where("bot_id", "=", id)
+          .where("is_active", "=", true)
+          .execute();
+      } else if (provider === "gemini") {
+        if (!VALID_GEMINI_VARIANTS.has(modelVariant)) {
+          throw new GraphQLError(
+            "Model variant incompatible with configured provider",
+            { extensions: { code: "VALIDATION_ERROR", field: "modelVariant" } },
+          );
+        }
+        await ctx.db
+          .updateTable("bot_brain_configs")
+          .set({
+            gemini_model_variant:    modelVariant,
+            openai_model_variant:    null,
+            anthropic_model_variant: null,
+            groq_model_variant:      null,
+          })
+          .where("bot_id", "=", id)
+          .where("is_active", "=", true)
+          .execute();
+      } else {
+        throw new GraphQLError(
+          "Model variant incompatible with configured provider",
+          { extensions: { code: "VALIDATION_ERROR", field: "modelVariant" } },
+        );
+      }
+
+      const updatedBot = await ctx.db
+        .selectFrom("bots")
+        .selectAll()
+        .where("id", "=", id)
+        .executeTakeFirstOrThrow();
+
+      return { bot: updatedBot };
+    },
+  }),
+);
+
 function providerValidationErrorMessage(body: unknown): string | undefined {
   if (typeof body !== "object" || body === null) return undefined;
   if (!("error" in body)) return undefined;
