@@ -75,9 +75,13 @@ type Bot {
 }
 
 type BotBrainConfig {
+  anthropicModelVariant: String
   brainType: String
+  geminiModelVariant: String
+  groqModelVariant: String
   keyPreview: String
   modelId: String
+  openaiModelVariant: String
   provider: String
 }
 
@@ -135,9 +139,13 @@ type BrainCatalog {
 }
 
 input BrainConfigInput {
+  anthropicModelVariant: String
   apiKey: String
   brainType: BrainType!
+  geminiModelVariant: String
+  groqModelVariant: String
   modelId: String!
+  openaiModelVariant: String
   provider: String
 }
 
@@ -302,7 +310,9 @@ type Mutation {
   pauseBot(id: ID!): BotResult
   selectTier(stripePaymentMethodId: String, tier: SubscriptionTier!): SelectTierResult
   skipProposal(id: ID!): SkipProposalResult
-  updateBotIdentity(id: ID!, input: UpdateBotIdentityInput!): UpdateBotIdentityResult
+  updateAgentIdentity(id: ID!, input: UpdateAgentIdentityInput!): UpdateAgentIdentityResult
+  updateBotBrain(id: ID!, input: UpdateBotBrainInput!): UpdateBotBrainResult
+  updateBotIdentity(id: ID!, input: UpdateAgentIdentityInput!): UpdateAgentIdentityResult
   validateBrainKey(apiKey: String!, provider: String!): ValidateBrainKeyResult
 }
 
@@ -510,12 +520,24 @@ enum TradeTempo {
   RELENTLESS
 }
 
-input UpdateBotIdentityInput {
+input UpdateAgentIdentityInput {
   avatarSeed: String!
+  backstory: String
+  communicationStyle: ProposalCommunicationStyle
+  lossReaction: String
   name: String!
+  winReaction: String
 }
 
-type UpdateBotIdentityResult {
+type UpdateAgentIdentityResult {
+  bot: Bot
+}
+
+input UpdateBotBrainInput {
+  modelVariant: String!
+}
+
+type UpdateBotBrainResult {
   bot: Bot
 }
 

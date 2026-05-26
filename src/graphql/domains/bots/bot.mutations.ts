@@ -83,6 +83,11 @@ const BrainConfigInput = builder.inputType("BrainConfigInput", {
     modelId: t.string({ required: true }),
     provider: t.string({ required: false }), // required if brainType == BYOK
     apiKey: t.string({ required: false }), // required if brainType == BYOK; encrypted before storage
+    // Feature 8c — model variant (only the field matching the active provider is non-null)
+    openaiModelVariant: t.string({ required: false }),
+    anthropicModelVariant: t.string({ required: false }),
+    groqModelVariant: t.string({ required: false }),
+    geminiModelVariant: t.string({ required: false }),
   }),
 });
 
@@ -551,6 +556,11 @@ builder.mutationField("createBot", (t) =>
             encrypted_key: encryptedKey,
             key_preview: keyPreview,
             is_active: true,
+            // Feature 8c — model variant columns (null for TACHYON_HOSTED; only active provider column is set)
+            openai_model_variant: input.brain.openaiModelVariant ?? null,
+            anthropic_model_variant: input.brain.anthropicModelVariant ?? null,
+            groq_model_variant: input.brain.groqModelVariant ?? null,
+            gemini_model_variant: input.brain.geminiModelVariant ?? null,
           })
           .execute();
 
@@ -928,57 +938,6 @@ builder.mutationField("updateAgentIdentity", (t) =>
 
         return updatedBot;
       });
-
-      return { bot: updated };
-    },
-  }),
-);
-
-// Deprecated alias — kept until mobile app version with updateAgentIdentity has fully
-// rolled out (≥95% of users). Remove in Task 15. Do not modify behavior.
-// Old mobile clients send updateBotIdentity with {name, avatarSeed} only.
-builder.mutationField("updateBotIdentity", (t) =>
-  t.field({
-    type: UpdateAgentIdentityResult,
-    args: {
-      id: t.arg.id({ required: true }),
-      input: t.arg({ type: UpdateAgentIdentityInput, required: true }),
-    },
-    authScopes: { authenticated: true },
-    resolve: async (_root, args, ctx) => {
-      // Delegate entirely to updateAgentIdentity resolver logic.
-      // Old clients only send name + avatarSeed; personality fields will be undefined and skipped.
-      await withOpRateLimit(
-        ctx,
-        "updateAgentIdentity",   // intentionally uses the new key — same bucket
-        OP_RATE_LIMITS.updateAgentIdentity.limit,
-        OP_RATE_LIMITS.updateAgentIdentity.windowSeconds,
-      );
-
-      if (args.input.name.length > 24) {
-        throw new GraphQLError("Bot name must be 24 characters or fewer", {
-          extensions: { code: "VALIDATION_ERROR", field: "name" },
-        });
-      }
-
-      const bot = await ctx.db
-        .selectFrom("bots")
-        .where("id", "=", args.id)
-        .select(["id", "user_id"])
-        .executeTakeFirst();
-
-      if (!bot) {
-        throw new GraphQLError("Bot not found", { extensions: { code: "NOT_FOUND" } });
-      }
-
-      assertOwnership(ctx, String(bot.user_id));
-
-      const updated = await ctx.db
-        .updateTable("bots")
-        .set({ name: args.input.name, avatar_seed: args.input.avatarSeed, updated_at: new Date() })
-        .where("id", "=", args.id)
-        .returningAll()
-        .executeTakeFirstOrThrow();
 
       return { bot: updated };
     },
