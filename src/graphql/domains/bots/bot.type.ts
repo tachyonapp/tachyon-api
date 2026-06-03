@@ -238,7 +238,7 @@ export const BotRef = builder.objectType("Bot", {
           String(bot.current_settings_id),
         );
         if (!s?.signal_weights) return null;
-        return JSON.parse(s.signal_weights as string) as {
+        return s.signal_weights as {
           technicals: number;
           news: number;
           fundamentals: number;
@@ -289,7 +289,7 @@ export const BotRef = builder.objectType("Bot", {
           String(bot.current_settings_id),
         );
         if (!s?.sub_sectors) return [];
-        return JSON.parse(s.sub_sectors as string) as string[];
+        return s.sub_sectors as string[];
       },
     }),
 
@@ -300,7 +300,7 @@ export const BotRef = builder.objectType("Bot", {
           String(bot.current_settings_id),
         );
         if (!s?.custom_watchlist) return [];
-        return JSON.parse(s.custom_watchlist as string) as string[];
+        return s.custom_watchlist as string[];
       },
     }),
 
@@ -311,7 +311,7 @@ export const BotRef = builder.objectType("Bot", {
           String(bot.current_settings_id),
         );
         if (!s?.exclusion_list) return [];
-        return JSON.parse(s.exclusion_list as string) as string[];
+        return s.exclusion_list as string[];
       },
     }),
 
@@ -407,9 +407,7 @@ export const BotRef = builder.objectType("Bot", {
           String(bot.current_settings_id),
         );
         if (!s?.day_avoidance) return [];
-        return JSON.parse(
-          s.day_avoidance as string,
-        ) as (typeof DayOfWeekEnum.$inferType)[];
+        return s.day_avoidance as (typeof DayOfWeekEnum.$inferType)[];
       },
     }),
 
