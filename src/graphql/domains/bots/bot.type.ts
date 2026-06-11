@@ -88,10 +88,23 @@ export const BotRef = builder.objectType("Bot", {
       resolve: (bot) => bot.status,
     }),
 
-    // allocation_pct is on the bots table directly
-    allocationPct: t.field({
-      type: "Decimal",
-      resolve: (bot) => parseFloat(bot.allocation_pct.toString()).toString(),
+    capitalAllocatedUsd: t.float({
+      nullable: false,
+      description: "Fixed dollar amount the agent may deploy in a single position.",
+      resolve: (bot) => Number(bot.capital_allocated_usd),
+    }),
+
+    recoveryModeActiveUntil: t.field({
+      type: "DateTime",
+      nullable: true,
+      description: "Date through which recovery mode constraints are active. Null if not in recovery.",
+      resolve: (bot) => bot.recovery_mode_active_until,
+    }),
+
+    recoveryModeApplied: t.string({
+      nullable: true,
+      description: "Recovery mode variant being enforced. Null if not in recovery.",
+      resolve: (bot) => bot.recovery_mode_applied ?? null,
     }),
 
     // Settings fields live in bot_settings, resolved via DataLoader.

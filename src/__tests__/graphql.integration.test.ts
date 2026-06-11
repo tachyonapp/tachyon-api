@@ -3,12 +3,8 @@
  *
  * These tests run against real PostgreSQL and Valkey. They require the
  * tachyon-infra docker-compose.test.yml stack to be running before execution.
+ * Start all services from tachyon-infra.
  *
- * Start the test stack:
- *   cd ../tachyon-infra && docker compose -f docker-compose.test.yml up postgres-test valkey-test db-migrate-test
- *
- * Run tests:
- *   npm test -- --testPathPattern=graphql.integration
  */
 
 import request from "supertest";
@@ -260,7 +256,7 @@ const CREATE_BOT_MUTATION = `
         id
         name
         status
-        allocationPct
+        capitalAllocatedUsd
         brain { brainType modelId provider keyPreview }
       }
       ... on ValidationError {
@@ -278,7 +274,7 @@ const validScoutInput = {
   frameName: "SCOUT",
   avatarSeed: "TestScout",
   colorway: "#2C6BED",
-  allocationPct: "0.1",
+  capitalAllocatedUsd: 1000,
   riskAttitude: "BALANCED",
   tradeTempo: "ACTIVE",
   combatPatience: "CALCULATED",
@@ -447,43 +443,25 @@ describe("POST /graphql — createBot mutations", () => {
     expect(res.body.data.createBot.field).toBe("riskAttitude");
   });
 
-  it("returns ALLOCATION_CEILING_EXCEEDED when total allocation would exceed 100%", async () => {
+  it("rejects bot creation when capitalAllocatedUsd is not positive", async () => {
     const { token } = await generateTestJwt({
       sub: "auth0|createbot-alloc-1",
       email: "createbot-alloc-1@test.com",
     });
     await authedRequest(token).send(gql("query { me { id } }"));
 
-    // SNIPER frame allows up to 60% allocation — use it so the first bot passes frame bounds.
-    // Create first bot consuming 60% allocation
-    await authedRequest(token).send(
-      gql(CREATE_BOT_MUTATION, {
-        input: {
-          ...validScoutInput,
-          frameName: "SNIPER",
-          name: "AllocBot1",
-          allocationPct: "0.6",
-          tradeTempo: "OPPORTUNISTIC",
-        },
-      }),
-    );
-
-    // Second bot requesting 50% would push total to 110%
     const res = await authedRequest(token).send(
       gql(CREATE_BOT_MUTATION, {
         input: {
           ...validScoutInput,
-          frameName: "SNIPER",
-          name: "AllocBot2",
-          allocationPct: "0.5",
-          tradeTempo: "OPPORTUNISTIC",
+          capitalAllocatedUsd: -100,
         },
       }),
     );
 
-    expect(res.body.errors).toBeUndefined();
-    expect(res.body.data.createBot.code).toBe("ALLOCATION_CEILING_EXCEEDED");
-    expect(res.body.data.createBot.field).toBe("allocationPct");
+    expect(res.body.errors).toBeDefined();
+    expect(res.body.errors[0].extensions.code).toBe("VALIDATION_ERROR");
+    expect(res.body.errors[0].extensions.field).toBe("capitalAllocatedUsd");
   });
 
   it("returns BYOK_KEY_INVALID when BYOK API key fails provider validation", async () => {
@@ -560,7 +538,7 @@ describe("POST /graphql — createBot mutations", () => {
         avatar_seed: "IdempotentBot",
         name: "IdempotentBot",
         colorway: "#2C6BED",
-        allocation_pct: "0.1",
+        capital_allocated_usd: "1000",
         status: "DRAFT",
       })
       .returning(["id", "name", "status"])
@@ -593,7 +571,7 @@ describe("POST /graphql — createBot mutations", () => {
       frameName: "BERSERKER",
       avatarSeed: "RageBerserker",
       colorway: "#D64545",
-      allocationPct: "0.15",
+      capitalAllocatedUsd: 1500,
       riskAttitude: "AGGRESSIVE",
       tradeTempo: "RELENTLESS",
       combatPatience: "IMPULSIVE",
@@ -631,7 +609,7 @@ describe("POST /graphql — createBot mutations", () => {
     const bot = res.body.data.createBot;
     expect(bot.status).toBe("ACTIVE");
     expect(bot.name).toBe("RageBerserker");
-    expect(bot.allocationPct).toBe("0.15");
+    expect(bot.capitalAllocatedUsd).toBe(1500);
   });
 
   it("zero-balance user: creates bot successfully (no USD balance check)", async () => {

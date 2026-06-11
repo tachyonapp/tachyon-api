@@ -84,5 +84,10 @@ builder.objectType("Proposal", {
       type: "DateTime",
       resolve: (p) => new Date(p.created_at),
     }),
+
+    rejectionReason: t.string({
+      nullable: true,
+      resolve: (p) => p.rejection_reason ?? null,
+    }),
   }),
 });
