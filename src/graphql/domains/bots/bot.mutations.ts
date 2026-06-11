@@ -120,7 +120,7 @@ const CreateBotInput = builder.inputType("CreateBotInput", {
     colorway: t.string({ required: true }), // hex string e.g. "#2C6BED"
 
     // Core trading parameters
-    allocationPct: t.field({ type: "Decimal", required: true }), // 0.01 – 1.00
+    capitalAllocatedUsd: t.float({ required: true }),
     riskAttitude: t.field({ type: RiskAttitudeEnum, required: true }),
     tradeTempo: t.field({ type: TradeTempoEnum, required: true }),
     combatPatience: t.field({ type: CombatPatienceEnum, required: true }),
@@ -237,26 +237,9 @@ builder.mutationField("createBot", (t) =>
         });
       }
 
-      // Validate allocationPct range [0.01, 1.00] + per-user ceiling.
-      // SUM() on an empty set returns null — coalesced to "0" safely.
-      const allocationPct = parseFloat(input.allocationPct);
-      if (allocationPct < 0.01 || allocationPct > 1.0) {
-        throw new GraphQLError("Allocation must be between 1% and 100%", {
-          extensions: { code: "VALIDATION_ERROR", field: "allocationPct" },
-        });
-      }
-
-      const existingAllocationRow = await ctx.db
-        .selectFrom("bots")
-        .select((eb) => eb.fn.sum<string>("allocation_pct").as("total"))
-        .where("user_id", "=", ctx.auth!.userId)
-        .where("status", "in", ["ACTIVE", "PAUSED"])
-        .executeTakeFirst();
-
-      const existingTotal = parseFloat(existingAllocationRow?.total ?? "0");
-      if (existingTotal + allocationPct > 1.0) {
-        throw new GraphQLError("Total bot allocation would exceed 100%", {
-          extensions: { code: "VALIDATION_ERROR", field: "allocationPct" },
+      if (input.capitalAllocatedUsd <= 0) {
+        throw new GraphQLError("Capital allocated must be a positive dollar amount", {
+          extensions: { code: "VALIDATION_ERROR", field: "capitalAllocatedUsd" },
         });
       }
 
@@ -415,11 +398,6 @@ builder.mutationField("createBot", (t) =>
       const resolvedExclusionList = input.exclusionList ?? [];
 
       // PLATFORM_LIMITS hard validation — rejects mutation on any violation
-      if (allocationPct > PLATFORM_LIMITS.allocationPct.max) {
-        throw new GraphQLError("Allocation exceeds platform ceiling", {
-          extensions: { code: "ALLOCATION_EXCEEDS_PLATFORM_CEILING" },
-        });
-      }
       if (dailyMaxLossPct < PLATFORM_LIMITS.dailyMaxLossPct.min) {
         throw new GraphQLError("Daily loss below platform floor", {
           extensions: { code: "DAILY_LOSS_BELOW_PLATFORM_FLOOR" },
@@ -471,7 +449,7 @@ builder.mutationField("createBot", (t) =>
             avatar_seed: input.avatarSeed,
             name: input.name,
             colorway: input.colorway,
-            allocation_pct: input.allocationPct,
+            capital_allocated_usd: input.capitalAllocatedUsd,
             status: "DRAFT",
           })
           .returning("id")
