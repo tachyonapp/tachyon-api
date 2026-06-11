@@ -44,9 +44,7 @@ import {
   WIN_REACTION_PRESETS,
   LOSS_REACTION_PRESETS,
 } from "@tachyonapp/tachyon-queue-types";
-import type { FrameAdvisory, FrameDefaults } from "@tachyonapp/tachyon-queue-types";
-import { ValidateBrainKeyResult, BotMutationResult } from "./bot.type";
-import * as Sentry from "@sentry/node";
+import { ValidateBrainKeyResult } from "./bot.type";
 
 // ---------------------------------------------------------------------------
 // Input types
@@ -206,6 +204,14 @@ const DeleteBotResult = builder.simpleObject("DeleteBotResult", {
   }),
 });
 
+const CreateBotResult = builder.unionType("CreateBotResult", {
+  types: ["Bot", ValidationError],
+  resolveType: (value) => {
+    if ("frame_id" in value) return "Bot";
+    return ValidationError;
+  },
+});
+
 // ---------------------------------------------------------------------------
 // createBot
 //
@@ -218,7 +224,7 @@ const DeleteBotResult = builder.simpleObject("DeleteBotResult", {
 
 builder.mutationField("createBot", (t) =>
   t.field({
-    type: BotMutationResult,
+    type: CreateBotResult,
     args: { input: t.arg({ type: CreateBotInput, required: true }) },
     authScopes: { authenticated: true },
     resolve: async (_root, args, ctx) => {
@@ -232,9 +238,7 @@ builder.mutationField("createBot", (t) =>
       const { input } = args;
 
       if (input.name.length > 24) {
-        throw new GraphQLError("Bot name must be 24 characters or fewer", {
-          extensions: { code: "VALIDATION_ERROR", field: "name" },
-        });
+        return { field: "name", code: "TOO_LONG", message: "Bot name must be 24 characters or fewer" };
       }
 
       if (input.capitalAllocatedUsd <= 0) {
@@ -272,6 +276,15 @@ builder.mutationField("createBot", (t) =>
         throw new GraphQLError("freezeAfterLosses must be between 1 and 5", {
           extensions: { code: "VALIDATION_ERROR", field: "emotionalControls.freezeAfterLosses" },
         });
+      }
+
+      // Frame-specific risk attitude bounds — GUARDIAN is conservative and forbids AGGRESSIVE
+      const FRAME_FORBIDDEN_RISK: Partial<Record<string, string[]>> = {
+        GUARDIAN: ["AGGRESSIVE"],
+      };
+      const forbiddenRisk = FRAME_FORBIDDEN_RISK[input.frameName];
+      if (forbiddenRisk?.includes(input.riskAttitude)) {
+        return { field: "riskAttitude", code: "OUT_OF_BOUNDS", message: `${input.frameName} frame does not allow ${input.riskAttitude} risk attitude` };
       }
 
       const frame = await ctx.db
@@ -312,6 +325,7 @@ builder.mutationField("createBot", (t) =>
 
         // SSRF guard: validation URL is from server-side allowlist — never constructed from user input
         const validationUrl = BYOK_PROVIDER_VALIDATION_ENDPOINTS[typedProvider];
+        const byokInvalidResult = { field: "brain.apiKey", code: "BYOK_KEY_INVALID", message: "API key validation failed" };
         try {
           const controller = new AbortController();
           const timeoutId = setTimeout(() => controller.abort(), 5000);
@@ -322,15 +336,10 @@ builder.mutationField("createBot", (t) =>
           clearTimeout(timeoutId);
 
           if (!response.ok) {
-            throw new GraphQLError("API key validation failed", {
-              extensions: { code: "VALIDATION_ERROR", field: "brain.apiKey" },
-            });
+            return byokInvalidResult;
           }
-        } catch (err) {
-          if (err instanceof GraphQLError) throw err;
-          throw new GraphQLError("API key validation failed", {
-            extensions: { code: "VALIDATION_ERROR", field: "brain.apiKey" },
-          });
+        } catch {
+          return byokInvalidResult;
         }
       }
 
@@ -372,7 +381,7 @@ builder.mutationField("createBot", (t) =>
         .executeTakeFirst();
 
       if (existingDraft) {
-        return { bot: existingDraft, advisories: [] };
+        return existingDraft;
       }
 
       // Frame-default resolution — apply frame defaults for any absent advanced field
@@ -552,42 +561,6 @@ builder.mutationField("createBot", (t) =>
         return newBot.id;
       });
 
-      // Advisory annotation pass — runs after transaction; never fails the mutation
-      let advisories: Array<{ code: string; field: string; message: string }> = [];
-      try {
-        const resolvedSettings = {
-          riskAttitude: input.riskAttitude,
-          tradeTempo: input.tradeTempo,
-          combatPatience: input.combatPatience,
-          signalWeights: resolvedSignalWeights,
-          confidenceThreshold: resolvedConfidenceThreshold,
-          regimeAwareness: resolvedRegimeAwareness,
-          earningsBehavior: resolvedEarningsBehavior,
-          dividendPreference: resolvedDividendPreference,
-          shortInterestSignal: resolvedShortInterestSignal,
-          positionSizingMethod: resolvedPositionSizingMethod,
-          minRrRatio: resolvedMinRrRatio,
-          maxDrawdownProtectionPct: resolvedMaxDrawdownProtectionPct,
-          recoveryMode: resolvedRecoveryMode,
-          sessionPreference: resolvedSessionPreference,
-          dayAvoidance: resolvedDayAvoidance,
-          volatilityEnvPreference: resolvedVolatilityEnvPreference,
-          proposalCommunicationStyle: resolvedProposalCommunicationStyle,
-        };
-        advisories = frameConfig.advisories
-          .filter((advisory: FrameAdvisory) => {
-            try { return advisory.condition(resolvedSettings as Partial<FrameDefaults>); } catch { return false; }
-          })
-          .map((advisory: FrameAdvisory) => ({
-            code: advisory.code,
-            field: advisory.field,
-            message: advisory.message,
-          }));
-      } catch (err) {
-        Sentry.captureException(err);
-        advisories = [];
-      }
-
       // Dispatch SCAN_BOT after transaction commits (fire-and-forget)
       const scanPayload: ScanBotJobPayload = {
         botId: String(botId),
@@ -605,7 +578,7 @@ builder.mutationField("createBot", (t) =>
         .where("id", "=", botId)
         .executeTakeFirstOrThrow();
 
-      return { bot, advisories };
+      return bot;
     },
   }),
 );
