@@ -30,10 +30,12 @@ interface BaseError {
 type Bot {
   activePosition: Position
   agentBackground: String
-  allocationPct: Decimal
   avatarSeed: String
   botBrainConfig: BotBrainConfig
   brain: BotBrainConfig
+
+  """Fixed dollar amount the agent may deploy in a single position."""
+  capitalAllocatedUsd: Float!
   combatPatience: CombatPatience
   confidenceThreshold: ConfidenceThreshold
   createdAt: DateTime
@@ -57,6 +59,14 @@ type Bot {
   proposalCommunicationStyle: ProposalCommunicationStyle
   proposals(status: ProposalStatus): [Proposal!]
   recoveryMode: RecoveryMode
+
+  """
+  Date through which recovery mode constraints are active. Null if not in recovery.
+  """
+  recoveryModeActiveUntil: DateTime
+
+  """Recovery mode variant being enforced. Null if not in recovery."""
+  recoveryModeApplied: String
   regimeAwareness: RegimeAwareness
   riskAttitude: RiskAttitude
   scanCapRemaining: Int
@@ -193,9 +203,9 @@ union ConnectBrokerResult = Account | ValidationError
 
 input CreateBotInput {
   agentBackground: String
-  allocationPct: Decimal!
   avatarSeed: String!
   brain: BrainConfigInput!
+  capitalAllocatedUsd: Float!
   colorway: String!
   combatPatience: CombatPatience!
   confidenceThreshold: ConfidenceThreshold
@@ -230,6 +240,8 @@ input CreateBotInput {
   volatilityEnvPreference: VolatilityEnvPreference
   winReaction: String
 }
+
+union CreateBotResult = Bot | ValidationError
 
 scalar DateTime
 
@@ -305,14 +317,13 @@ type Mutation {
   """Mark the authenticated user's FTUE as complete. Idempotent."""
   completeOnboarding: Boolean
   connectBroker(brokerName: String!, credentials: String!): ConnectBrokerResult
-  createBot(input: CreateBotInput!): BotMutationResult
+  createBot(input: CreateBotInput!): CreateBotResult
   deleteBot(id: ID!): DeleteBotResult
   pauseBot(id: ID!): BotResult
   selectTier(stripePaymentMethodId: String, tier: SubscriptionTier!): SelectTierResult
   skipProposal(id: ID!): SkipProposalResult
   updateAgentIdentity(id: ID!, input: UpdateAgentIdentityInput!): UpdateAgentIdentityResult
   updateBotBrain(id: ID!, input: UpdateBotBrainInput!): UpdateBotBrainResult
-  updateBotIdentity(id: ID!, input: UpdateAgentIdentityInput!): UpdateAgentIdentityResult
   validateBrainKey(apiKey: String!, provider: String!): ValidateBrainKeyResult
 }
 
@@ -372,6 +383,7 @@ type Proposal {
   minHoldUntil: DateTime
   qty: Decimal
   rationaleText: String
+  rejectionReason: String
   side: ProposalSide
   status: ProposalStatus
   stopPrice: Decimal

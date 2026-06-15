@@ -120,13 +120,8 @@ export const ConfidenceThresholdEnum = builder.enumType("ConfidenceThreshold", {
   values: ["LOW", "MEDIUM", "HIGH", "VERY_HIGH"] as const,
 });
 
-export const RegimeAwarenessEnum = builder.enumType("RegimeAwareness", {
-  values: [
-    "NO_CHANGE",
-    "REDUCE_SIZE_BEAR",
-    "STAND_DOWN_BEAR",
-    "INCREASE_AGGRESSION_BULL",
-  ] as const,
+export const RegimeBehaviorEnum = builder.enumType("RegimeBehavior", {
+  values: ["NO_CHANGE", "SIZE_UP", "SIZE_DOWN", "PAUSE"] as const,
 });
 
 export const EarningsBehaviorEnum = builder.enumType("EarningsBehavior", {

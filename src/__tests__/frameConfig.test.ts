@@ -34,16 +34,14 @@ describe("FRAME_CONFIG", () => {
   });
 
   describe("frame-specific default values", () => {
-    it("GUARDIAN defaults to STAND_DOWN_BEAR regime awareness", () => {
-      expect(FRAME_CONFIG.GUARDIAN.defaults.regimeAwareness).toBe(
-        "STAND_DOWN_BEAR",
-      );
+    it("GUARDIAN defaults to PAUSE bear regime behavior", () => {
+      expect(FRAME_CONFIG.GUARDIAN.defaults.bearRegimeBehavior).toBe("PAUSE");
+      expect(FRAME_CONFIG.GUARDIAN.defaults.bullRegimeBehavior).toBe("NO_CHANGE");
     });
 
-    it("BERSERKER defaults to INCREASE_AGGRESSION_BULL regime awareness", () => {
-      expect(FRAME_CONFIG.BERSERKER.defaults.regimeAwareness).toBe(
-        "INCREASE_AGGRESSION_BULL",
-      );
+    it("BERSERKER defaults to SIZE_UP bull regime behavior", () => {
+      expect(FRAME_CONFIG.BERSERKER.defaults.bullRegimeBehavior).toBe("SIZE_UP");
+      expect(FRAME_CONFIG.BERSERKER.defaults.bearRegimeBehavior).toBe("NO_CHANGE");
     });
 
     it("SNIPER default dayAvoidance includes MONDAY", () => {
