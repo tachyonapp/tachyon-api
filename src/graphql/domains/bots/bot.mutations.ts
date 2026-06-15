@@ -13,7 +13,7 @@ import {
   StopStyleNameEnum,
   BrainTypeEnum,
   ConfidenceThresholdEnum,
-  RegimeAwarenessEnum,
+  RegimeBehaviorEnum,
   EarningsBehaviorEnum,
   DividendPreferenceEnum,
   ShortInterestSignalEnum,
@@ -155,7 +155,8 @@ const CreateBotInput = builder.inputType("CreateBotInput", {
     // Feature 8b — Intelligence & Signal Preferences
     signalWeights: t.field({ type: SignalWeightsInput, required: false }),
     confidenceThreshold: t.field({ type: ConfidenceThresholdEnum, required: false }),
-    regimeAwareness: t.field({ type: RegimeAwarenessEnum, required: false }),
+    bullRegimeBehavior: t.field({ type: RegimeBehaviorEnum, required: false }),
+    bearRegimeBehavior: t.field({ type: RegimeBehaviorEnum, required: false }),
     earningsBehavior: t.field({ type: EarningsBehaviorEnum, required: false }),
 
     // Feature 8b — Sector & Universe Refinement
@@ -387,7 +388,8 @@ builder.mutationField("createBot", (t) =>
       // Frame-default resolution — apply frame defaults for any absent advanced field
       const resolvedSignalWeights = input.signalWeights ?? frameConfig.defaults.signalWeights;
       const resolvedConfidenceThreshold = input.confidenceThreshold ?? frameConfig.defaults.confidenceThreshold;
-      const resolvedRegimeAwareness = input.regimeAwareness ?? frameConfig.defaults.regimeAwareness;
+      const resolvedBullRegimeBehavior = input.bullRegimeBehavior ?? frameConfig.defaults.bullRegimeBehavior;
+      const resolvedBearRegimeBehavior = input.bearRegimeBehavior ?? frameConfig.defaults.bearRegimeBehavior;
       const resolvedEarningsBehavior = input.earningsBehavior ?? frameConfig.defaults.earningsBehavior;
       const resolvedDividendPreference = input.dividendPreference ?? frameConfig.defaults.dividendPreference;
       const resolvedShortInterestSignal = input.shortInterestSignal ?? frameConfig.defaults.shortInterestSignal;
@@ -497,7 +499,8 @@ builder.mutationField("createBot", (t) =>
             // Feature 8b columns
             signal_weights: JSON.stringify(resolvedSignalWeights),
             confidence_threshold: resolvedConfidenceThreshold,
-            regime_awareness: resolvedRegimeAwareness,
+            bull_regime_behavior: resolvedBullRegimeBehavior,
+            bear_regime_behavior: resolvedBearRegimeBehavior,
             earnings_behavior: resolvedEarningsBehavior,
             sub_sectors: resolvedSubSectors.length > 0 ? JSON.stringify(resolvedSubSectors) : null,
             custom_watchlist: resolvedCustomWatchlist.length > 0 ? JSON.stringify(resolvedCustomWatchlist) : null,

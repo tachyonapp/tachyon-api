@@ -8,7 +8,7 @@ import {
   ProposalStatusEnum,
   SectorFilterEnum,
   ConfidenceThresholdEnum,
-  RegimeAwarenessEnum,
+  RegimeBehaviorEnum,
   EarningsBehaviorEnum,
   DividendPreferenceEnum,
   ShortInterestSignalEnum,
@@ -43,10 +43,16 @@ builder.objectType(BotBrainConfig, {
     modelId: t.exposeString("modelId"),
     provider: t.exposeString("provider", { nullable: true }),
     keyPreview: t.exposeString("keyPreview", { nullable: true }),
-    openaiModelVariant:    t.exposeString("openaiModelVariant",    { nullable: true }),
-    anthropicModelVariant: t.exposeString("anthropicModelVariant", { nullable: true }),
-    groqModelVariant:      t.exposeString("groqModelVariant",      { nullable: true }),
-    geminiModelVariant:    t.exposeString("geminiModelVariant",    { nullable: true }),
+    openaiModelVariant: t.exposeString("openaiModelVariant", {
+      nullable: true,
+    }),
+    anthropicModelVariant: t.exposeString("anthropicModelVariant", {
+      nullable: true,
+    }),
+    groqModelVariant: t.exposeString("groqModelVariant", { nullable: true }),
+    geminiModelVariant: t.exposeString("geminiModelVariant", {
+      nullable: true,
+    }),
   }),
 });
 
@@ -90,20 +96,23 @@ export const BotRef = builder.objectType("Bot", {
 
     capitalAllocatedUsd: t.float({
       nullable: false,
-      description: "Fixed dollar amount the agent may deploy in a single position.",
+      description:
+        "Fixed dollar amount the agent may deploy in a single position.",
       resolve: (bot) => Number(bot.capital_allocated_usd),
     }),
 
     recoveryModeActiveUntil: t.field({
       type: "DateTime",
       nullable: true,
-      description: "Date through which recovery mode constraints are active. Null if not in recovery.",
+      description:
+        "Date through which recovery mode constraints are active. Null if not in recovery.",
       resolve: (bot) => bot.recovery_mode_active_until,
     }),
 
     recoveryModeApplied: t.string({
       nullable: true,
-      description: "Recovery mode variant being enforced. Null if not in recovery.",
+      description:
+        "Recovery mode variant being enforced. Null if not in recovery.",
       resolve: (bot) => bot.recovery_mode_applied ?? null,
     }),
 
@@ -271,15 +280,27 @@ export const BotRef = builder.objectType("Bot", {
       },
     }),
 
-    regimeAwareness: t.field({
-      type: RegimeAwarenessEnum,
+    bullRegimeBehavior: t.field({
+      type: RegimeBehaviorEnum,
       nullable: true,
       resolve: async (bot, _args, ctx) => {
         if (!bot.current_settings_id) return null;
         const s = await ctx.loaders.botSettingsById.load(
           String(bot.current_settings_id),
         );
-        return s?.regime_awareness ?? null;
+        return s?.bull_regime_behavior ?? null;
+      },
+    }),
+
+    bearRegimeBehavior: t.field({
+      type: RegimeBehaviorEnum,
+      nullable: true,
+      resolve: async (bot, _args, ctx) => {
+        if (!bot.current_settings_id) return null;
+        const s = await ctx.loaders.botSettingsById.load(
+          String(bot.current_settings_id),
+        );
+        return s?.bear_regime_behavior ?? null;
       },
     }),
 
@@ -536,10 +557,10 @@ export const BotRef = builder.objectType("Bot", {
           modelId: config.model_id,
           provider: config.provider ?? null,
           keyPreview: config.key_preview ?? null,
-          openaiModelVariant:    config.openai_model_variant    ?? null,
+          openaiModelVariant: config.openai_model_variant ?? null,
           anthropicModelVariant: config.anthropic_model_variant ?? null,
-          groqModelVariant:      config.groq_model_variant      ?? null,
-          geminiModelVariant:    config.gemini_model_variant    ?? null,
+          groqModelVariant: config.groq_model_variant ?? null,
+          geminiModelVariant: config.gemini_model_variant ?? null,
         };
       },
     }),
@@ -557,10 +578,10 @@ export const BotRef = builder.objectType("Bot", {
           modelId: config.model_id,
           provider: config.provider ?? null,
           keyPreview: config.key_preview ?? null,
-          openaiModelVariant:    config.openai_model_variant    ?? null,
+          openaiModelVariant: config.openai_model_variant ?? null,
           anthropicModelVariant: config.anthropic_model_variant ?? null,
-          groqModelVariant:      config.groq_model_variant      ?? null,
-          geminiModelVariant:    config.gemini_model_variant    ?? null,
+          groqModelVariant: config.groq_model_variant ?? null,
+          geminiModelVariant: config.gemini_model_variant ?? null,
         };
       },
     }),
