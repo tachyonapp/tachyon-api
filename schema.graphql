@@ -31,8 +31,10 @@ type Bot {
   activePosition: Position
   agentBackground: String
   avatarSeed: String
+  bearRegimeBehavior: RegimeBehavior
   botBrainConfig: BotBrainConfig
   brain: BotBrainConfig
+  bullRegimeBehavior: RegimeBehavior
 
   """Fixed dollar amount the agent may deploy in a single position."""
   capitalAllocatedUsd: Float!
@@ -67,7 +69,6 @@ type Bot {
 
   """Recovery mode variant being enforced. Null if not in recovery."""
   recoveryModeApplied: String
-  regimeAwareness: RegimeAwareness
   riskAttitude: RiskAttitude
   scanCapRemaining: Int
   scanCapUsed: Int
@@ -204,7 +205,9 @@ union ConnectBrokerResult = Account | ValidationError
 input CreateBotInput {
   agentBackground: String
   avatarSeed: String!
+  bearRegimeBehavior: RegimeBehavior
   brain: BrainConfigInput!
+  bullRegimeBehavior: RegimeBehavior
   capitalAllocatedUsd: Float!
   colorway: String!
   combatPatience: CombatPatience!
@@ -227,7 +230,6 @@ input CreateBotInput {
   positionSizingMethod: PositionSizingMethod
   proposalCommunicationStyle: ProposalCommunicationStyle
   recoveryMode: RecoveryMode
-  regimeAwareness: RegimeAwareness
   riskAttitude: RiskAttitude!
   rulesOfEngagement: RulesOfEngagementInput!
   sectors: [SectorFilter!]!
@@ -430,11 +432,11 @@ enum RecoveryMode {
   STAND_DOWN_1W
 }
 
-enum RegimeAwareness {
-  INCREASE_AGGRESSION_BULL
+enum RegimeBehavior {
   NO_CHANGE
-  REDUCE_SIZE_BEAR
-  STAND_DOWN_BEAR
+  PAUSE
+  SIZE_DOWN
+  SIZE_UP
 }
 
 enum RiskAttitude {
