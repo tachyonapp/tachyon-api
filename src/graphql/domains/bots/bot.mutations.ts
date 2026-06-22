@@ -154,7 +154,10 @@ const CreateBotInput = builder.inputType("CreateBotInput", {
 
     // Feature 8b — Intelligence & Signal Preferences
     signalWeights: t.field({ type: SignalWeightsInput, required: false }),
-    confidenceThreshold: t.field({ type: ConfidenceThresholdEnum, required: false }),
+    confidenceThreshold: t.field({
+      type: ConfidenceThresholdEnum,
+      required: false,
+    }),
     bullRegimeBehavior: t.field({ type: RegimeBehaviorEnum, required: false }),
     bearRegimeBehavior: t.field({ type: RegimeBehaviorEnum, required: false }),
     earningsBehavior: t.field({ type: EarningsBehaviorEnum, required: false }),
@@ -163,23 +166,41 @@ const CreateBotInput = builder.inputType("CreateBotInput", {
     subSectors: t.stringList({ required: false }),
     customWatchlist: t.stringList({ required: false }),
     exclusionList: t.stringList({ required: false }),
-    dividendPreference: t.field({ type: DividendPreferenceEnum, required: false }),
-    shortInterestSignal: t.field({ type: ShortInterestSignalEnum, required: false }),
+    dividendPreference: t.field({
+      type: DividendPreferenceEnum,
+      required: false,
+    }),
+    shortInterestSignal: t.field({
+      type: ShortInterestSignalEnum,
+      required: false,
+    }),
 
     // Feature 8b — Sizing & Risk Refinement
-    positionSizingMethod: t.field({ type: PositionSizingMethodEnum, required: false }),
+    positionSizingMethod: t.field({
+      type: PositionSizingMethodEnum,
+      required: false,
+    }),
     minRrRatio: t.float({ required: false }),
     maxDrawdownProtectionPct: t.float({ required: false }),
     recoveryMode: t.field({ type: RecoveryModeEnum, required: false }),
 
     // Feature 8b — Timing & Schedule Preferences
-    sessionPreference: t.field({ type: SessionPreferenceEnum, required: false }),
+    sessionPreference: t.field({
+      type: SessionPreferenceEnum,
+      required: false,
+    }),
     dayAvoidance: t.field({ type: [DayOfWeekEnum], required: false }),
-    volatilityEnvPreference: t.field({ type: VolatilityEnvPreferenceEnum, required: false }),
+    volatilityEnvPreference: t.field({
+      type: VolatilityEnvPreferenceEnum,
+      required: false,
+    }),
 
     // Feature 8b — Agent Personality & Voice
     agentBackground: t.string({ required: false }),
-    proposalCommunicationStyle: t.field({ type: ProposalCommunicationStyleEnum, required: false }),
+    proposalCommunicationStyle: t.field({
+      type: ProposalCommunicationStyleEnum,
+      required: false,
+    }),
     winReaction: t.string({ required: false }),
     lossReaction: t.string({ required: false }),
   }),
@@ -239,13 +260,23 @@ builder.mutationField("createBot", (t) =>
       const { input } = args;
 
       if (input.name.length > 24) {
-        return { field: "name", code: "TOO_LONG", message: "Bot name must be 24 characters or fewer" };
+        return {
+          field: "name",
+          code: "TOO_LONG",
+          message: "Bot name must be 24 characters or fewer",
+        };
       }
 
       if (input.capitalAllocatedUsd <= 0) {
-        throw new GraphQLError("Capital allocated must be a positive dollar amount", {
-          extensions: { code: "VALIDATION_ERROR", field: "capitalAllocatedUsd" },
-        });
+        throw new GraphQLError(
+          "Capital allocated must be a positive dollar amount",
+          {
+            extensions: {
+              code: "VALIDATION_ERROR",
+              field: "capitalAllocatedUsd",
+            },
+          },
+        );
       }
 
       const frameConfig = FRAME_CONFIG[input.frameName];
@@ -258,10 +289,22 @@ builder.mutationField("createBot", (t) =>
       }
 
       const maInputFields = [
-        { key: "marketAwareness.momentum", value: input.marketAwareness.momentum },
-        { key: "marketAwareness.meanReversion", value: input.marketAwareness.meanReversion },
-        { key: "marketAwareness.volatility", value: input.marketAwareness.volatility },
-        { key: "marketAwareness.trendFollowing", value: input.marketAwareness.trendFollowing },
+        {
+          key: "marketAwareness.momentum",
+          value: input.marketAwareness.momentum,
+        },
+        {
+          key: "marketAwareness.meanReversion",
+          value: input.marketAwareness.meanReversion,
+        },
+        {
+          key: "marketAwareness.volatility",
+          value: input.marketAwareness.volatility,
+        },
+        {
+          key: "marketAwareness.trendFollowing",
+          value: input.marketAwareness.trendFollowing,
+        },
       ] as const;
 
       for (const { key, value } of maInputFields) {
@@ -275,7 +318,10 @@ builder.mutationField("createBot", (t) =>
       const fal = input.emotionalControls.freezeAfterLosses;
       if (fal !== null && fal !== undefined && (fal < 1 || fal > 5)) {
         throw new GraphQLError("freezeAfterLosses must be between 1 and 5", {
-          extensions: { code: "VALIDATION_ERROR", field: "emotionalControls.freezeAfterLosses" },
+          extensions: {
+            code: "VALIDATION_ERROR",
+            field: "emotionalControls.freezeAfterLosses",
+          },
         });
       }
 
@@ -285,7 +331,11 @@ builder.mutationField("createBot", (t) =>
       };
       const forbiddenRisk = FRAME_FORBIDDEN_RISK[input.frameName];
       if (forbiddenRisk?.includes(input.riskAttitude)) {
-        return { field: "riskAttitude", code: "OUT_OF_BOUNDS", message: `${input.frameName} frame does not allow ${input.riskAttitude} risk attitude` };
+        return {
+          field: "riskAttitude",
+          code: "OUT_OF_BOUNDS",
+          message: `${input.frameName} frame does not allow ${input.riskAttitude} risk attitude`,
+        };
       }
 
       const frame = await ctx.db
@@ -296,26 +346,38 @@ builder.mutationField("createBot", (t) =>
         .executeTakeFirst();
 
       if (!frame) {
-        throw new GraphQLError(`Bot frame "${input.frameName}" is not available`, {
-          extensions: { code: "VALIDATION_ERROR", field: "frameName" },
-        });
+        throw new GraphQLError(
+          `Bot frame "${input.frameName}" is not available`,
+          {
+            extensions: { code: "VALIDATION_ERROR", field: "frameName" },
+          },
+        );
       }
 
       // BYOK validation — external HTTP call; done after all local checks
       if (input.brain.brainType === "BYOK") {
         const { provider, modelId, apiKey } = input.brain;
 
-        if (!provider || !(ALLOWED_BYOK_PROVIDERS as readonly string[]).includes(provider)) {
-          throw new GraphQLError(`Provider "${provider ?? "missing"}" is not supported`, {
-            extensions: { code: "VALIDATION_ERROR", field: "brain.provider" },
-          });
+        if (
+          !provider ||
+          !(ALLOWED_BYOK_PROVIDERS as readonly string[]).includes(provider)
+        ) {
+          throw new GraphQLError(
+            `Provider "${provider ?? "missing"}" is not supported`,
+            {
+              extensions: { code: "VALIDATION_ERROR", field: "brain.provider" },
+            },
+          );
         }
 
         const typedProvider = provider as ByokProvider;
         if (!ALLOWED_BYOK_MODELS[typedProvider].includes(modelId)) {
-          throw new GraphQLError(`Model "${modelId}" is not supported for provider "${provider}"`, {
-            extensions: { code: "VALIDATION_ERROR", field: "brain.modelId" },
-          });
+          throw new GraphQLError(
+            `Model "${modelId}" is not supported for provider "${provider}"`,
+            {
+              extensions: { code: "VALIDATION_ERROR", field: "brain.modelId" },
+            },
+          );
         }
 
         if (!apiKey) {
@@ -326,7 +388,11 @@ builder.mutationField("createBot", (t) =>
 
         // SSRF guard: validation URL is from server-side allowlist — never constructed from user input
         const validationUrl = BYOK_PROVIDER_VALIDATION_ENDPOINTS[typedProvider];
-        const byokInvalidResult = { field: "brain.apiKey", code: "BYOK_KEY_INVALID", message: "API key validation failed" };
+        const byokInvalidResult = {
+          field: "brain.apiKey",
+          code: "BYOK_KEY_INVALID",
+          message: "API key validation failed",
+        };
         try {
           const controller = new AbortController();
           const timeoutId = setTimeout(() => controller.abort(), 5000);
@@ -352,9 +418,12 @@ builder.mutationField("createBot", (t) =>
         .executeTakeFirst();
 
       if (!exitPersonality) {
-        throw new GraphQLError(`Exit personality "${input.exitPersonality.name}" not found`, {
-          extensions: { code: "VALIDATION_ERROR", field: "exitPersonality" },
-        });
+        throw new GraphQLError(
+          `Exit personality "${input.exitPersonality.name}" not found`,
+          {
+            extensions: { code: "VALIDATION_ERROR", field: "exitPersonality" },
+          },
+        );
       }
 
       const stopStyle = await ctx.db
@@ -365,9 +434,12 @@ builder.mutationField("createBot", (t) =>
         .executeTakeFirst();
 
       if (!stopStyle) {
-        throw new GraphQLError(`Stop style "${input.stopLossStyle.name}" not found`, {
-          extensions: { code: "VALIDATION_ERROR", field: "stopLossStyle" },
-        });
+        throw new GraphQLError(
+          `Stop style "${input.stopLossStyle.name}" not found`,
+          {
+            extensions: { code: "VALIDATION_ERROR", field: "stopLossStyle" },
+          },
+        );
       }
 
       // Idempotency check — return existing DRAFT bot if same name was created within 60s
@@ -386,21 +458,39 @@ builder.mutationField("createBot", (t) =>
       }
 
       // Frame-default resolution — apply frame defaults for any absent advanced field
-      const resolvedSignalWeights = input.signalWeights ?? frameConfig.defaults.signalWeights;
-      const resolvedConfidenceThreshold = input.confidenceThreshold ?? frameConfig.defaults.confidenceThreshold;
-      const resolvedBullRegimeBehavior = input.bullRegimeBehavior ?? frameConfig.defaults.bullRegimeBehavior;
-      const resolvedBearRegimeBehavior = input.bearRegimeBehavior ?? frameConfig.defaults.bearRegimeBehavior;
-      const resolvedEarningsBehavior = input.earningsBehavior ?? frameConfig.defaults.earningsBehavior;
-      const resolvedDividendPreference = input.dividendPreference ?? frameConfig.defaults.dividendPreference;
-      const resolvedShortInterestSignal = input.shortInterestSignal ?? frameConfig.defaults.shortInterestSignal;
-      const resolvedPositionSizingMethod = input.positionSizingMethod ?? frameConfig.defaults.positionSizingMethod;
-      const resolvedMinRrRatio = input.minRrRatio ?? frameConfig.defaults.minRrRatio;
-      const resolvedMaxDrawdownProtectionPct = input.maxDrawdownProtectionPct ?? frameConfig.defaults.maxDrawdownProtectionPct;
-      const resolvedRecoveryMode = input.recoveryMode ?? frameConfig.defaults.recoveryMode;
-      const resolvedSessionPreference = input.sessionPreference ?? frameConfig.defaults.sessionPreference;
-      const resolvedDayAvoidance = input.dayAvoidance ?? frameConfig.defaults.dayAvoidance;
-      const resolvedVolatilityEnvPreference = input.volatilityEnvPreference ?? frameConfig.defaults.volatilityEnvPreference;
-      const resolvedProposalCommunicationStyle = input.proposalCommunicationStyle ?? frameConfig.defaults.proposalCommunicationStyle;
+      const resolvedSignalWeights =
+        input.signalWeights ?? frameConfig.defaults.signalWeights;
+      const resolvedConfidenceThreshold =
+        input.confidenceThreshold ?? frameConfig.defaults.confidenceThreshold;
+      const resolvedBullRegimeBehavior =
+        input.bullRegimeBehavior ?? frameConfig.defaults.bullRegimeBehavior;
+      const resolvedBearRegimeBehavior =
+        input.bearRegimeBehavior ?? frameConfig.defaults.bearRegimeBehavior;
+      const resolvedEarningsBehavior =
+        input.earningsBehavior ?? frameConfig.defaults.earningsBehavior;
+      const resolvedDividendPreference =
+        input.dividendPreference ?? frameConfig.defaults.dividendPreference;
+      const resolvedShortInterestSignal =
+        input.shortInterestSignal ?? frameConfig.defaults.shortInterestSignal;
+      const resolvedPositionSizingMethod =
+        input.positionSizingMethod ?? frameConfig.defaults.positionSizingMethod;
+      const resolvedMinRrRatio =
+        input.minRrRatio ?? frameConfig.defaults.minRrRatio;
+      const resolvedMaxDrawdownProtectionPct =
+        input.maxDrawdownProtectionPct ??
+        frameConfig.defaults.maxDrawdownProtectionPct;
+      const resolvedRecoveryMode =
+        input.recoveryMode ?? frameConfig.defaults.recoveryMode;
+      const resolvedSessionPreference =
+        input.sessionPreference ?? frameConfig.defaults.sessionPreference;
+      const resolvedDayAvoidance =
+        input.dayAvoidance ?? frameConfig.defaults.dayAvoidance;
+      const resolvedVolatilityEnvPreference =
+        input.volatilityEnvPreference ??
+        frameConfig.defaults.volatilityEnvPreference;
+      const resolvedProposalCommunicationStyle =
+        input.proposalCommunicationStyle ??
+        frameConfig.defaults.proposalCommunicationStyle;
       const resolvedAgentBackground = input.agentBackground ?? null;
       const resolvedWinReaction = input.winReaction ?? null;
       const resolvedLossReaction = input.lossReaction ?? null;
@@ -415,38 +505,57 @@ builder.mutationField("createBot", (t) =>
         });
       }
       if (input.signalWeights) {
-        const total = input.signalWeights.technicals + input.signalWeights.news + input.signalWeights.fundamentals;
+        const total =
+          input.signalWeights.technicals +
+          input.signalWeights.news +
+          input.signalWeights.fundamentals;
         if (total !== PLATFORM_LIMITS.signalWeightsTotal) {
           throw new GraphQLError("Signal weights must total 100", {
             extensions: { code: "SIGNAL_WEIGHTS_INVALID_TOTAL" },
           });
         }
       }
-      if (resolvedCustomWatchlist.length > PLATFORM_LIMITS.customWatchlistMaxTickers) {
+      if (
+        resolvedCustomWatchlist.length >
+        PLATFORM_LIMITS.customWatchlistMaxTickers
+      ) {
         throw new GraphQLError("Watchlist exceeds 10 ticker maximum", {
           extensions: { code: "WATCHLIST_EXCEEDS_MAX" },
         });
       }
-      if (resolvedExclusionList.length > PLATFORM_LIMITS.exclusionListMaxTickers) {
+      if (
+        resolvedExclusionList.length > PLATFORM_LIMITS.exclusionListMaxTickers
+      ) {
         throw new GraphQLError("Exclusion list exceeds 10 ticker maximum", {
           extensions: { code: "EXCLUSION_LIST_EXCEEDS_MAX" },
         });
       }
-      const overlapTicker = resolvedCustomWatchlist.find((ticker) => resolvedExclusionList.includes(ticker));
+      const overlapTicker = resolvedCustomWatchlist.find((ticker) =>
+        resolvedExclusionList.includes(ticker),
+      );
       if (overlapTicker) {
-        throw new GraphQLError("A ticker cannot appear in both watchlist and exclusion list", {
-          extensions: { code: "WATCHLIST_EXCLUSION_OVERLAP" },
-        });
+        throw new GraphQLError(
+          "A ticker cannot appear in both watchlist and exclusion list",
+          {
+            extensions: { code: "WATCHLIST_EXCLUSION_OVERLAP" },
+          },
+        );
       }
       if (resolvedDayAvoidance.length === 5) {
         throw new GraphQLError("At least one trading day must remain active", {
           extensions: { code: "ALL_DAYS_AVOIDED" },
         });
       }
-      if (resolvedAgentBackground && resolvedAgentBackground.length > PLATFORM_LIMITS.agentBackgroundMaxChars) {
-        throw new GraphQLError("Agent background exceeds 300 character maximum", {
-          extensions: { code: "AGENT_BACKGROUND_EXCEEDS_MAX" },
-        });
+      if (
+        resolvedAgentBackground &&
+        resolvedAgentBackground.length > PLATFORM_LIMITS.agentBackgroundMaxChars
+      ) {
+        throw new GraphQLError(
+          "Agent background exceeds 300 character maximum",
+          {
+            extensions: { code: "AGENT_BACKGROUND_EXCEEDS_MAX" },
+          },
+        );
       }
 
       // Atomic DB transaction — no orphaned records on partial failure
@@ -479,14 +588,19 @@ builder.mutationField("createBot", (t) =>
             daily_max_loss_pct: input.dailyMaxLossPct,
             daily_max_gain: input.dailyMaxGain ?? "0",
             emotional_controls: JSON.stringify({
-              freezeAfterLosses: input.emotionalControls.freezeAfterLosses ?? null,
-              cooldownAfterVolatility: input.emotionalControls.cooldownAfterVolatility,
-              standDownAfterNoonIfLosing: input.emotionalControls.standDownAfterNoonIfLosing,
+              freezeAfterLosses:
+                input.emotionalControls.freezeAfterLosses ?? null,
+              cooldownAfterVolatility:
+                input.emotionalControls.cooldownAfterVolatility,
+              standDownAfterNoonIfLosing:
+                input.emotionalControls.standDownAfterNoonIfLosing,
             }),
             rules_of_engagement: JSON.stringify({
               oneTradeAtATime: true,
-              overnightHoldAllowed: input.rulesOfEngagement.overnightHoldAllowed,
-              noSameDayExitUnlessStopLoss: input.rulesOfEngagement.noSameDayExitUnlessStopLoss,
+              overnightHoldAllowed:
+                input.rulesOfEngagement.overnightHoldAllowed,
+              noSameDayExitUnlessStopLoss:
+                input.rulesOfEngagement.noSameDayExitUnlessStopLoss,
             }),
             market_awareness: JSON.stringify({
               momentum: input.marketAwareness.momentum,
@@ -502,9 +616,18 @@ builder.mutationField("createBot", (t) =>
             bull_regime_behavior: resolvedBullRegimeBehavior,
             bear_regime_behavior: resolvedBearRegimeBehavior,
             earnings_behavior: resolvedEarningsBehavior,
-            sub_sectors: resolvedSubSectors.length > 0 ? JSON.stringify(resolvedSubSectors) : null,
-            custom_watchlist: resolvedCustomWatchlist.length > 0 ? JSON.stringify(resolvedCustomWatchlist) : null,
-            exclusion_list: resolvedExclusionList.length > 0 ? JSON.stringify(resolvedExclusionList) : null,
+            sub_sectors:
+              resolvedSubSectors.length > 0
+                ? JSON.stringify(resolvedSubSectors)
+                : null,
+            custom_watchlist:
+              resolvedCustomWatchlist.length > 0
+                ? JSON.stringify(resolvedCustomWatchlist)
+                : null,
+            exclusion_list:
+              resolvedExclusionList.length > 0
+                ? JSON.stringify(resolvedExclusionList)
+                : null,
             dividend_preference: resolvedDividendPreference,
             short_interest_signal: resolvedShortInterestSignal,
             position_sizing_method: resolvedPositionSizingMethod,
@@ -512,7 +635,10 @@ builder.mutationField("createBot", (t) =>
             max_drawdown_protection_pct: resolvedMaxDrawdownProtectionPct,
             recovery_mode: resolvedRecoveryMode,
             session_preference: resolvedSessionPreference,
-            day_avoidance: resolvedDayAvoidance.length > 0 ? JSON.stringify(resolvedDayAvoidance) : null,
+            day_avoidance:
+              resolvedDayAvoidance.length > 0
+                ? JSON.stringify(resolvedDayAvoidance)
+                : null,
             volatility_env_preference: resolvedVolatilityEnvPreference,
             agent_background: resolvedAgentBackground,
             proposal_communication_style: resolvedProposalCommunicationStyle,
@@ -755,7 +881,11 @@ builder.mutationField("deleteBot", (t) =>
 
       await ctx.db
         .updateTable("bots")
-        .set({ status: "ARCHIVED", deleted_at: new Date(), updated_at: new Date() })
+        .set({
+          status: "ARCHIVED",
+          deleted_at: new Date(),
+          updated_at: new Date(),
+        })
         .where("id", "=", args.id)
         .where("user_id", "=", ctx.auth!.userId)
         .execute();
@@ -782,7 +912,10 @@ const UpdateAgentIdentityInput = builder.inputType("UpdateAgentIdentityInput", {
     name: t.string({ required: true }),
     avatarSeed: t.string({ required: true }),
     backstory: t.string({ required: false }),
-    communicationStyle: t.field({ type: ProposalCommunicationStyleEnum, required: false }),
+    communicationStyle: t.field({
+      type: ProposalCommunicationStyleEnum,
+      required: false,
+    }),
     winReaction: t.string({ required: false }),
     lossReaction: t.string({ required: false }),
   }),
@@ -822,7 +955,11 @@ builder.mutationField("updateAgentIdentity", (t) =>
         });
       }
 
-      if (input.backstory !== null && input.backstory !== undefined && input.backstory.length > 300) {
+      if (
+        input.backstory !== null &&
+        input.backstory !== undefined &&
+        input.backstory.length > 300
+      ) {
         throw new GraphQLError("Backstory must be 300 characters or fewer", {
           extensions: { code: "VALIDATION_ERROR", field: "backstory" },
         });
@@ -830,17 +967,23 @@ builder.mutationField("updateAgentIdentity", (t) =>
 
       if (input.winReaction !== null && input.winReaction !== undefined) {
         if (!WIN_REACTION_PRESETS.includes(input.winReaction)) {
-          throw new GraphQLError("Win reaction must be one of the allowed preset values", {
-            extensions: { code: "VALIDATION_ERROR", field: "winReaction" },
-          });
+          throw new GraphQLError(
+            "Win reaction must be one of the allowed preset values",
+            {
+              extensions: { code: "VALIDATION_ERROR", field: "winReaction" },
+            },
+          );
         }
       }
 
       if (input.lossReaction !== null && input.lossReaction !== undefined) {
         if (!LOSS_REACTION_PRESETS.includes(input.lossReaction)) {
-          throw new GraphQLError("Loss reaction must be one of the allowed preset values", {
-            extensions: { code: "VALIDATION_ERROR", field: "lossReaction" },
-          });
+          throw new GraphQLError(
+            "Loss reaction must be one of the allowed preset values",
+            {
+              extensions: { code: "VALIDATION_ERROR", field: "lossReaction" },
+            },
+          );
         }
       }
 
@@ -872,16 +1015,22 @@ builder.mutationField("updateAgentIdentity", (t) =>
 
         const hasPersonalityFields =
           (input.backstory !== null && input.backstory !== undefined) ||
-          (input.communicationStyle !== null && input.communicationStyle !== undefined) ||
+          (input.communicationStyle !== null &&
+            input.communicationStyle !== undefined) ||
           (input.winReaction !== null && input.winReaction !== undefined) ||
           (input.lossReaction !== null && input.lossReaction !== undefined);
 
         if (hasPersonalityFields && bot.current_settings_id) {
           const settingsUpdate: Record<string, unknown> = {};
-          if (input.backstory !== undefined) settingsUpdate.agent_background = input.backstory;
-          if (input.communicationStyle !== undefined) settingsUpdate.proposal_communication_style = input.communicationStyle;
-          if (input.winReaction !== undefined) settingsUpdate.win_reaction = input.winReaction;
-          if (input.lossReaction !== undefined) settingsUpdate.loss_reaction = input.lossReaction;
+          if (input.backstory !== undefined)
+            settingsUpdate.agent_background = input.backstory;
+          if (input.communicationStyle !== undefined)
+            settingsUpdate.proposal_communication_style =
+              input.communicationStyle;
+          if (input.winReaction !== undefined)
+            settingsUpdate.win_reaction = input.winReaction;
+          if (input.lossReaction !== undefined)
+            settingsUpdate.loss_reaction = input.lossReaction;
 
           await trx
             .updateTable("bot_settings")
@@ -892,6 +1041,108 @@ builder.mutationField("updateAgentIdentity", (t) =>
 
         return updatedBot;
       });
+
+      return { bot: updated };
+    },
+  }),
+);
+
+// ---------------------------------------------------------------------------
+// updateAgentRiskSettings
+// ---------------------------------------------------------------------------
+
+const VALID_MIN_RR_RATIOS = new Set([1.5, 2.0, 2.5, 3.0]);
+
+const UpdateAgentRiskSettingsInput = builder.inputType(
+  "UpdateAgentRiskSettingsInput",
+  {
+    fields: (t) => ({
+      positionSizingMethod: t.field({
+        type: PositionSizingMethodEnum,
+        required: true,
+      }),
+      minRrRatio: t.float({ required: true }),
+      recoveryMode: t.field({ type: RecoveryModeEnum, required: true }),
+    }),
+  },
+);
+
+const UpdateAgentRiskSettingsResult = builder.objectRef<{ bot: BotsRow }>(
+  "UpdateAgentRiskSettingsResult",
+);
+builder.objectType(UpdateAgentRiskSettingsResult, {
+  fields: (t) => ({
+    bot: t.field({
+      type: "Bot",
+      resolve: (r) => r.bot,
+    }),
+  }),
+});
+
+builder.mutationField("updateAgentRiskSettings", (t) =>
+  t.field({
+    type: UpdateAgentRiskSettingsResult,
+    args: {
+      id: t.arg.id({ required: true }),
+      input: t.arg({ type: UpdateAgentRiskSettingsInput, required: true }),
+    },
+    authScopes: { authenticated: true },
+    resolve: async (_root, { id, input }, ctx) => {
+      await withOpRateLimit(
+        ctx,
+        "updateAgentRiskSettings",
+        OP_RATE_LIMITS.updateAgentRiskSettings.limit,
+        OP_RATE_LIMITS.updateAgentRiskSettings.windowSeconds,
+      );
+
+      const bot = await ctx.db
+        .selectFrom("bots")
+        .where("id", "=", id)
+        .select(["id", "user_id", "current_settings_id"])
+        .executeTakeFirst();
+
+      if (!bot) {
+        throw new GraphQLError("Bot not found", {
+          extensions: { code: "NOT_FOUND" },
+        });
+      }
+
+      assertOwnership(ctx, String(bot.user_id));
+
+      // NOTE: deliberately no BOT_STOOD_DOWN guard here, unlike activateBot —
+      // FR8 requires this preference write to succeed regardless of
+      // stand-down state. See bot.mutations.ts:636-642 for the guard this
+      // mutation must NOT copy.
+
+      if (!VALID_MIN_RR_RATIOS.has(input.minRrRatio)) {
+        throw new GraphQLError("Invalid minRrRatio", {
+          extensions: { code: "VALIDATION_ERROR", field: "minRrRatio" },
+        });
+      }
+
+      if (!bot.current_settings_id) {
+        throw new GraphQLError("Bot has no settings configured", {
+          extensions: { code: "NOT_FOUND" },
+        });
+      }
+
+      // Scoped strictly to bot_settings — must never touch bots.recovery_mode_applied
+      // or bots.recovery_mode_active_until (rule-engine.ts owns those exclusively).
+      await ctx.db
+        .updateTable("bot_settings")
+        .set({
+          position_sizing_method: input.positionSizingMethod,
+          min_rr_ratio: input.minRrRatio,
+          recovery_mode: input.recoveryMode,
+        })
+        .where("id", "=", bot.current_settings_id)
+        .execute();
+
+      const updated = await ctx.db
+        .selectFrom("bots")
+        .where("id", "=", id)
+        .selectAll()
+        .executeTakeFirstOrThrow();
 
       return { bot: updated };
     },
@@ -913,17 +1164,23 @@ const UpdateBotBrainInput = builder.inputType("UpdateBotBrainInput", {
   }),
 });
 
-const UpdateBotBrainResult = builder.objectRef<{ bot: BotsRow }>("UpdateBotBrainResult");
+const UpdateBotBrainResult = builder.objectRef<{ bot: BotsRow }>(
+  "UpdateBotBrainResult",
+);
 builder.objectType(UpdateBotBrainResult, {
   fields: (t) => ({
     bot: t.field({ type: "Bot", resolve: (r) => r.bot }),
   }),
 });
 
-const VALID_OPENAI_VARIANTS    = new Set(["gpt-4o", "gpt-4o-mini"]);
+const VALID_OPENAI_VARIANTS = new Set(["gpt-4o", "gpt-4o-mini"]);
 const VALID_ANTHROPIC_VARIANTS = new Set(["sonnet", "opus"]); // haiku excluded — TACHYON_HOSTED only
-const VALID_GROQ_VARIANTS      = new Set(["llama-4-scout", "llama-4-maverick", "llama-3.3-70b"]);
-const VALID_GEMINI_VARIANTS    = new Set(["gemini-2.0-flash", "gemini-2.5-flash"]);
+const VALID_GROQ_VARIANTS = new Set([
+  "llama-4-scout",
+  "llama-4-maverick",
+  "llama-3.3-70b",
+]);
+const VALID_GEMINI_VARIANTS = new Set(["gemini-2.0-flash", "gemini-2.5-flash"]);
 
 builder.mutationField("updateBotBrain", (t) =>
   t.field({
@@ -949,7 +1206,9 @@ builder.mutationField("updateBotBrain", (t) =>
         .executeTakeFirst();
 
       if (!bot) {
-        throw new GraphQLError("Bot not found", { extensions: { code: "NOT_FOUND" } });
+        throw new GraphQLError("Bot not found", {
+          extensions: { code: "NOT_FOUND" },
+        });
       }
 
       assertOwnership(ctx, String(bot.user_id));
@@ -994,10 +1253,10 @@ builder.mutationField("updateBotBrain", (t) =>
         await ctx.db
           .updateTable("bot_brain_configs")
           .set({
-            openai_model_variant:    modelVariant,
+            openai_model_variant: modelVariant,
             anthropic_model_variant: null,
-            groq_model_variant:      null,
-            gemini_model_variant:    null,
+            groq_model_variant: null,
+            gemini_model_variant: null,
           })
           .where("bot_id", "=", id)
           .where("is_active", "=", true)
@@ -1013,9 +1272,9 @@ builder.mutationField("updateBotBrain", (t) =>
           .updateTable("bot_brain_configs")
           .set({
             anthropic_model_variant: modelVariant,
-            openai_model_variant:    null,
-            groq_model_variant:      null,
-            gemini_model_variant:    null,
+            openai_model_variant: null,
+            groq_model_variant: null,
+            gemini_model_variant: null,
           })
           .where("bot_id", "=", id)
           .where("is_active", "=", true)
@@ -1030,10 +1289,10 @@ builder.mutationField("updateBotBrain", (t) =>
         await ctx.db
           .updateTable("bot_brain_configs")
           .set({
-            groq_model_variant:      modelVariant,
-            openai_model_variant:    null,
+            groq_model_variant: modelVariant,
+            openai_model_variant: null,
             anthropic_model_variant: null,
-            gemini_model_variant:    null,
+            gemini_model_variant: null,
           })
           .where("bot_id", "=", id)
           .where("is_active", "=", true)
@@ -1048,10 +1307,10 @@ builder.mutationField("updateBotBrain", (t) =>
         await ctx.db
           .updateTable("bot_brain_configs")
           .set({
-            gemini_model_variant:    modelVariant,
-            openai_model_variant:    null,
+            gemini_model_variant: modelVariant,
+            openai_model_variant: null,
             anthropic_model_variant: null,
-            groq_model_variant:      null,
+            groq_model_variant: null,
           })
           .where("bot_id", "=", id)
           .where("is_active", "=", true)
