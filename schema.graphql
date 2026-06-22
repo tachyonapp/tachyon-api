@@ -325,6 +325,7 @@ type Mutation {
   selectTier(stripePaymentMethodId: String, tier: SubscriptionTier!): SelectTierResult
   skipProposal(id: ID!): SkipProposalResult
   updateAgentIdentity(id: ID!, input: UpdateAgentIdentityInput!): UpdateAgentIdentityResult
+  updateAgentRiskSettings(id: ID!, input: UpdateAgentRiskSettingsInput!): UpdateAgentRiskSettingsResult
   updateBotBrain(id: ID!, input: UpdateBotBrainInput!): UpdateBotBrainResult
   validateBrainKey(apiKey: String!, provider: String!): ValidateBrainKeyResult
 }
@@ -544,6 +545,16 @@ input UpdateAgentIdentityInput {
 }
 
 type UpdateAgentIdentityResult {
+  bot: Bot
+}
+
+input UpdateAgentRiskSettingsInput {
+  minRrRatio: Float!
+  positionSizingMethod: PositionSizingMethod!
+  recoveryMode: RecoveryMode!
+}
+
+type UpdateAgentRiskSettingsResult {
   bot: Bot
 }
 
