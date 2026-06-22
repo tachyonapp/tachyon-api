@@ -633,6 +633,255 @@ describe("POST /graphql — createBot mutations", () => {
   });
 });
 
+// ─── updateAgentRiskSettings mutations ─────────────────────────────────────────
+
+const UPDATE_AGENT_RISK_SETTINGS_MUTATION = `
+  mutation UpdateAgentRiskSettings($id: ID!, $input: UpdateAgentRiskSettingsInput!) {
+    updateAgentRiskSettings(id: $id, input: $input) {
+      bot {
+        id
+        positionSizingMethod
+        minRrRatio
+        recoveryMode
+      }
+    }
+  }
+`;
+
+const validRiskSettingsInput = {
+  positionSizingMethod: "VOLATILITY_ADJUSTED",
+  minRrRatio: 2.5,
+  recoveryMode: "MORE_CONSERVATIVE_2D",
+};
+
+describe("POST /graphql — updateAgentRiskSettings mutations", () => {
+  afterEach(async () => {
+    // Clear rate limit keys so each test starts fresh
+    const valkey = getValkey();
+    const keys = await valkey.keys("rate:op:*");
+    if (keys.length > 0) await valkey.del(...keys);
+
+    // Delete bots for all test users to prevent allocation accumulating across runs.
+    const { getDb } = await import("../lib/db");
+    const db = getDb();
+    await db
+      .deleteFrom("bots")
+      .where(
+        "user_id",
+        "in",
+        db
+          .selectFrom("users")
+          .select("id")
+          .where("email", "like", "%@test.com"),
+      )
+      .execute();
+  });
+
+  async function createTestBot(token: string, name: string): Promise<string> {
+    const res = await authedRequest(token).send(
+      gql(CREATE_BOT_MUTATION, { input: { ...validScoutInput, name } }),
+    );
+    return res.body.data.createBot.id;
+  }
+
+  it("happy path: persists all 3 fields and the returned bot reflects them", async () => {
+    const { token } = await generateTestJwt({
+      sub: "auth0|risk-happy-1",
+      email: "risk-happy-1@test.com",
+    });
+    await authedRequest(token).send(gql("query { me { id } }"));
+    const botId = await createTestBot(token, "RiskHappyBot");
+
+    const res = await authedRequest(token).send(
+      gql(UPDATE_AGENT_RISK_SETTINGS_MUTATION, {
+        id: botId,
+        input: validRiskSettingsInput,
+      }),
+    );
+
+    expect(res.status).toBe(200);
+    expect(res.body.errors).toBeUndefined();
+    expect(res.body.data.updateAgentRiskSettings.bot).toEqual({
+      id: botId,
+      positionSizingMethod: "VOLATILITY_ADJUSTED",
+      minRrRatio: 2.5,
+      recoveryMode: "MORE_CONSERVATIVE_2D",
+    });
+  });
+
+  it("returns VALIDATION_ERROR for an out-of-set minRrRatio", async () => {
+    const { token } = await generateTestJwt({
+      sub: "auth0|risk-validation-1",
+      email: "risk-validation-1@test.com",
+    });
+    await authedRequest(token).send(gql("query { me { id } }"));
+    const botId = await createTestBot(token, "RiskValidationBot");
+
+    const res = await authedRequest(token).send(
+      gql(UPDATE_AGENT_RISK_SETTINGS_MUTATION, {
+        id: botId,
+        input: { ...validRiskSettingsInput, minRrRatio: 1.75 },
+      }),
+    );
+
+    expect(res.status).toBe(200);
+    expect(res.body.errors).toBeDefined();
+    expect(res.body.errors[0].extensions.code).toBe("VALIDATION_ERROR");
+    expect(res.body.errors[0].extensions.field).toBe("minRrRatio");
+  });
+
+  it("returns FORBIDDEN when called by a non-owning user", async () => {
+    const { token: ownerToken } = await generateTestJwt({
+      sub: "auth0|risk-owner-1",
+      email: "risk-owner-1@test.com",
+    });
+    const { token: otherToken } = await generateTestJwt({
+      sub: "auth0|risk-other-1",
+      email: "risk-other-1@test.com",
+    });
+    await authedRequest(ownerToken).send(gql("query { me { id } }"));
+    await authedRequest(otherToken).send(gql("query { me { id } }"));
+    const botId = await createTestBot(ownerToken, "RiskOwnershipBot");
+
+    const res = await authedRequest(otherToken).send(
+      gql(UPDATE_AGENT_RISK_SETTINGS_MUTATION, {
+        id: botId,
+        input: validRiskSettingsInput,
+      }),
+    );
+
+    expect(res.status).toBe(200);
+    expect(res.body.errors).toBeDefined();
+    expect(res.body.errors[0].extensions.code).toBe("FORBIDDEN");
+  });
+
+  it("STOOD_DOWN bypass: succeeds for a stood-down bot and leaves bots.recovery_mode_applied / recovery_mode_active_until untouched", async () => {
+    const { token } = await generateTestJwt({
+      sub: "auth0|risk-standown-1",
+      email: "risk-standown-1@test.com",
+    });
+    await authedRequest(token).send(gql("query { me { id } }"));
+    const botId = await createTestBot(token, "RiskStandownBot");
+
+    const { getDb } = await import("../lib/db");
+    const db = getDb();
+    await db
+      .updateTable("bots")
+      .set({
+        status: "STOOD_DOWN",
+        recovery_mode_applied: "NORMAL",
+        recovery_mode_active_until: "2026-06-25",
+      })
+      .where("id", "=", botId)
+      .execute();
+
+    const before = await db
+      .selectFrom("bots")
+      .select(["recovery_mode_applied", "recovery_mode_active_until"])
+      .where("id", "=", botId)
+      .executeTakeFirstOrThrow();
+
+    const res = await authedRequest(token).send(
+      gql(UPDATE_AGENT_RISK_SETTINGS_MUTATION, {
+        id: botId,
+        input: validRiskSettingsInput,
+      }),
+    );
+
+    expect(res.status).toBe(200);
+    expect(res.body.errors).toBeUndefined();
+    expect(
+      res.body.errors?.some(
+        (e: { extensions?: { code?: string } }) =>
+          e?.extensions?.code === "BOT_STOOD_DOWN",
+      ) ?? false,
+    ).toBe(false);
+
+    const after = await db
+      .selectFrom("bots")
+      .select(["recovery_mode_applied", "recovery_mode_active_until"])
+      .where("id", "=", botId)
+      .executeTakeFirstOrThrow();
+
+    expect(after).toEqual(before);
+  });
+
+  it("FR8: writes only to bot_settings, never to bots", async () => {
+    const { token } = await generateTestJwt({
+      sub: "auth0|risk-fr8-1",
+      email: "risk-fr8-1@test.com",
+    });
+    await authedRequest(token).send(gql("query { me { id } }"));
+    const botId = await createTestBot(token, "RiskFr8Bot");
+
+    const { getDb } = await import("../lib/db");
+    const db = getDb();
+    // Spies wrap the real implementation (calls through) — this records which
+    // tables the resolver touches without changing its behavior.
+    // Cast to `any` for the spy: Kysely's updateTable overloads are deep enough
+    // that jest.spyOn's typed signature blows the TS instantiation depth limit (TS2589).
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const updateTableSpy = jest.spyOn(db as any, "updateTable");
+
+    const res = await authedRequest(token).send(
+      gql(UPDATE_AGENT_RISK_SETTINGS_MUTATION, {
+        id: botId,
+        input: validRiskSettingsInput,
+      }),
+    );
+
+    const tablesUpdated = updateTableSpy.mock.calls.map(
+      (call: unknown[]) => call[0],
+    );
+    updateTableSpy.mockRestore();
+
+    expect(res.status).toBe(200);
+    expect(res.body.errors).toBeUndefined();
+    expect(tablesUpdated).toContain("bot_settings");
+    expect(tablesUpdated).not.toContain("bots");
+  });
+
+  it("rate limit: allows the first 10 calls and blocks the 11th with RATE_LIMITED, per OP_RATE_LIMITS.updateAgentRiskSettings", async () => {
+    const { token } = await generateTestJwt({
+      sub: "auth0|risk-rl-1",
+      email: "risk-rl-1@test.com",
+    });
+    await authedRequest(token).send(gql("query { me { id } }"));
+    const botId = await createTestBot(token, "RiskRlBot");
+
+    for (let i = 1; i <= 10; i++) {
+      const res = await authedRequest(token).send(
+        gql(UPDATE_AGENT_RISK_SETTINGS_MUTATION, {
+          id: botId,
+          input: validRiskSettingsInput,
+        }),
+      );
+      expect(res.status).toBe(200);
+      const errors: Array<{ extensions?: { code?: string } }> =
+        res.body.errors ?? [];
+      expect(errors.some((e) => e?.extensions?.code === "RATE_LIMITED")).toBe(
+        false,
+      );
+    }
+
+    const res11 = await authedRequest(token).send(
+      gql(UPDATE_AGENT_RISK_SETTINGS_MUTATION, {
+        id: botId,
+        input: validRiskSettingsInput,
+      }),
+    );
+    expect(res11.status).toBe(200);
+    expect(res11.body.errors).toBeDefined();
+
+    const rateLimitError = res11.body.errors.find(
+      (e: { extensions?: { code?: string } }) =>
+        e?.extensions?.code === "RATE_LIMITED",
+    );
+    expect(rateLimitError).toBeDefined();
+    expect(rateLimitError.extensions.operation).toBe("updateAgentRiskSettings");
+  });
+});
+
 // ─── Per-operation rate limiting ──────────────────────────────────────────────
 
 describe("POST /graphql — per-operation rate limiting", () => {
