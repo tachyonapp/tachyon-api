@@ -97,12 +97,12 @@ type BotBrainConfig {
 }
 
 enum BotFrame {
-  BERSERKER
-  BRAWLER
-  BRUISER
-  GUARDIAN
-  SCOUT
-  SNIPER
+  ANCHOR
+  CATALYST
+  COMPOUNDER
+  PENDULUM
+  SURGE
+  THRESHOLD
 }
 
 type BotMutationResult {
