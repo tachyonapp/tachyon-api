@@ -21,15 +21,15 @@ export const PositionStatusEnum = builder.enumType("PositionStatus", {
   values: ["OPEN", "CLOSED"] as const,
 });
 
-// Values match bot_frames.name in the lookup table (seeded: SCOUT → BRAWLER)
+// Values match bot_frames.name in the lookup table (seeded: CATALYST → PENDULUM)
 export const BotFrameEnum = builder.enumType("BotFrame", {
   values: [
-    "SCOUT",
-    "BRUISER",
-    "SNIPER",
-    "BERSERKER",
-    "GUARDIAN",
-    "BRAWLER",
+    "CATALYST",
+    "COMPOUNDER",
+    "THRESHOLD",
+    "SURGE",
+    "ANCHOR",
+    "PENDULUM",
   ] as const,
 });
 

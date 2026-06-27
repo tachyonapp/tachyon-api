@@ -325,9 +325,9 @@ builder.mutationField("createBot", (t) =>
         });
       }
 
-      // Frame-specific risk attitude bounds — GUARDIAN is conservative and forbids AGGRESSIVE
+      // Frame-specific risk attitude bounds — ANCHOR is conservative and forbids AGGRESSIVE
       const FRAME_FORBIDDEN_RISK: Partial<Record<string, string[]>> = {
-        GUARDIAN: ["AGGRESSIVE"],
+        ANCHOR: ["AGGRESSIVE"],
       };
       const forbiddenRisk = FRAME_FORBIDDEN_RISK[input.frameName];
       if (forbiddenRisk?.includes(input.riskAttitude)) {
@@ -1051,6 +1051,11 @@ builder.mutationField("updateAgentIdentity", (t) =>
 // updateAgentRiskSettings
 // ---------------------------------------------------------------------------
 
+// TODO: 1.5/2.0/2.5/3.0 is duplicated across this file, tachyon-db's chk_min_rr_ratio
+// CHECK constraint, and tachyon-mobile's SizingRisk.tsx/RiskSettingsEditSheet.tsx.
+// Single source of truth should be a value-level export from tachyon-queue-types
+// (which already owns FrameDefaults.minRrRatio's 1.5|2.0|2.5|3.0 union type) — import
+// it here instead of re-declaring the literal set.
 const VALID_MIN_RR_RATIOS = new Set([1.5, 2.0, 2.5, 3.0]);
 
 const UpdateAgentRiskSettingsInput = builder.inputType(
