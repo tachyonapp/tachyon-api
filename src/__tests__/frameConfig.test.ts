@@ -24,7 +24,9 @@ describe("FRAME_CONFIG", () => {
     it.each(FRAMES)("%s has valid signal weights summing to 100", (frame) => {
       const { signalWeights } = FRAME_CONFIG[frame].defaults;
       const total =
-        signalWeights.technicals + signalWeights.news + signalWeights.fundamentals;
+        signalWeights.technicals +
+        signalWeights.news +
+        signalWeights.fundamentals;
       expect(total).toBe(100);
     });
 
@@ -34,28 +36,28 @@ describe("FRAME_CONFIG", () => {
   });
 
   describe("frame-specific default values", () => {
-    it("GUARDIAN defaults to PAUSE bear regime behavior", () => {
-      expect(FRAME_CONFIG.GUARDIAN.defaults.bearRegimeBehavior).toBe("PAUSE");
-      expect(FRAME_CONFIG.GUARDIAN.defaults.bullRegimeBehavior).toBe("NO_CHANGE");
+    it("ANCHOR defaults to PAUSE bear regime behavior", () => {
+      expect(FRAME_CONFIG.ANCHOR.defaults.bearRegimeBehavior).toBe("PAUSE");
+      expect(FRAME_CONFIG.ANCHOR.defaults.bullRegimeBehavior).toBe("NO_CHANGE");
     });
 
-    it("BERSERKER defaults to SIZE_UP bull regime behavior", () => {
-      expect(FRAME_CONFIG.BERSERKER.defaults.bullRegimeBehavior).toBe("SIZE_UP");
-      expect(FRAME_CONFIG.BERSERKER.defaults.bearRegimeBehavior).toBe("NO_CHANGE");
+    it("SURGE defaults to SIZE_UP bull regime behavior", () => {
+      expect(FRAME_CONFIG.SURGE.defaults.bullRegimeBehavior).toBe("SIZE_UP");
+      expect(FRAME_CONFIG.SURGE.defaults.bearRegimeBehavior).toBe("NO_CHANGE");
     });
 
-    it("SNIPER default dayAvoidance includes MONDAY", () => {
-      expect(FRAME_CONFIG.SNIPER.defaults.dayAvoidance).toContain("MONDAY");
+    it("THRESHOLD default dayAvoidance includes MONDAY", () => {
+      expect(FRAME_CONFIG.THRESHOLD.defaults.dayAvoidance).toContain("MONDAY");
     });
 
-    it("GUARDIAN defaults to PREFER_DIVIDEND dividend preference", () => {
-      expect(FRAME_CONFIG.GUARDIAN.defaults.dividendPreference).toBe(
+    it("ANCHOR defaults to PREFER_DIVIDEND dividend preference", () => {
+      expect(FRAME_CONFIG.ANCHOR.defaults.dividendPreference).toBe(
         "PREFER_DIVIDEND",
       );
     });
 
-    it("BRAWLER defaults to EXCLUDE_DIVIDEND dividend preference", () => {
-      expect(FRAME_CONFIG.BRAWLER.defaults.dividendPreference).toBe(
+    it("PENDULUM defaults to EXCLUDE_DIVIDEND dividend preference", () => {
+      expect(FRAME_CONFIG.PENDULUM.defaults.dividendPreference).toBe(
         "EXCLUDE_DIVIDEND",
       );
     });

@@ -268,11 +268,11 @@ const CREATE_BOT_MUTATION = `
   }
 `;
 
-// Minimal valid input for a SCOUT/TACHYON_HOSTED bot
-const validScoutInput = {
-  name: "TestScout",
-  frameName: "SCOUT",
-  avatarSeed: "TestScout",
+// Minimal valid input for a CATALYST/TACHYON_HOSTED bot
+const validCatalystInput = {
+  name: "TestCatalyst",
+  frameName: "CATALYST",
+  avatarSeed: "TestCatalyst",
   colorway: "#2C6BED",
   capitalAllocatedUsd: 1000,
   riskAttitude: "BALANCED",
@@ -311,19 +311,19 @@ describe("POST /graphql — createBot mutations", () => {
       .insertInto("bot_frames")
       .values([
         {
-          name: "SCOUT",
+          name: "CATALYST",
           description: "Momentum Confirmation",
           is_active: true,
         },
-        { name: "SNIPER", description: "Breakout Trading", is_active: true },
-        { name: "GUARDIAN", description: "Mean Reversion", is_active: true },
-        { name: "BRUISER", description: "Trend Following", is_active: true },
+        { name: "THRESHOLD", description: "Breakout Trading", is_active: true },
+        { name: "ANCHOR", description: "Mean Reversion", is_active: true },
+        { name: "COMPOUNDER", description: "Trend Following", is_active: true },
         {
-          name: "BERSERKER",
+          name: "SURGE",
           description: "Volatility Trading",
           is_active: true,
         },
-        { name: "BRAWLER", description: "Swing Trading", is_active: true },
+        { name: "PENDULUM", description: "Swing Trading", is_active: true },
       ])
       .onConflict((oc) => oc.column("name").doNothing())
       .execute();
@@ -382,14 +382,14 @@ describe("POST /graphql — createBot mutations", () => {
     await authedRequest(token).send(gql("query { me { id } }"));
 
     const res = await authedRequest(token).send(
-      gql(CREATE_BOT_MUTATION, { input: validScoutInput }),
+      gql(CREATE_BOT_MUTATION, { input: validCatalystInput }),
     );
     expect(res.status).toBe(200);
     expect(res.body.errors).toBeUndefined();
 
     const bot = res.body.data.createBot;
     expect(bot.status).toBe("ACTIVE");
-    expect(bot.name).toBe("TestScout");
+    expect(bot.name).toBe("TestCatalyst");
     expect(bot.brain.brainType).toBe("TACHYON_HOSTED");
     expect(bot.brain.keyPreview).toBeNull();
   });
@@ -403,7 +403,7 @@ describe("POST /graphql — createBot mutations", () => {
 
     const res = await authedRequest(token).send(
       gql(CREATE_BOT_MUTATION, {
-        input: { ...validScoutInput, name: "A".repeat(25) },
+        input: { ...validCatalystInput, name: "A".repeat(25) },
       }),
     );
 
@@ -412,17 +412,17 @@ describe("POST /graphql — createBot mutations", () => {
     expect(res.body.data.createBot.field).toBe("name");
   });
 
-  it("returns OUT_OF_BOUNDS when frame bounds are violated (GUARDIAN + AGGRESSIVE riskAttitude)", async () => {
+  it("returns OUT_OF_BOUNDS when frame bounds are violated (ANCHOR + AGGRESSIVE riskAttitude)", async () => {
     const { token } = await generateTestJwt({
       sub: "auth0|createbot-bounds-1",
       email: "createbot-bounds-1@test.com",
     });
     await authedRequest(token).send(gql("query { me { id } }"));
 
-    const invalidGuardianInput = {
-      ...validScoutInput,
-      frameName: "GUARDIAN",
-      riskAttitude: "AGGRESSIVE", // GUARDIAN forbids AGGRESSIVE
+    const invalidAnchorInput = {
+      ...validCatalystInput,
+      frameName: "ANCHOR",
+      riskAttitude: "AGGRESSIVE", // ANCHOR forbids AGGRESSIVE
       tradeTempo: "OPPORTUNISTIC",
       combatPatience: "PATIENT",
       marketAwareness: {
@@ -435,7 +435,7 @@ describe("POST /graphql — createBot mutations", () => {
     };
 
     const res = await authedRequest(token).send(
-      gql(CREATE_BOT_MUTATION, { input: invalidGuardianInput }),
+      gql(CREATE_BOT_MUTATION, { input: invalidAnchorInput }),
     );
 
     expect(res.body.errors).toBeUndefined();
@@ -453,7 +453,7 @@ describe("POST /graphql — createBot mutations", () => {
     const res = await authedRequest(token).send(
       gql(CREATE_BOT_MUTATION, {
         input: {
-          ...validScoutInput,
+          ...validCatalystInput,
           capitalAllocatedUsd: -100,
         },
       }),
@@ -478,7 +478,7 @@ describe("POST /graphql — createBot mutations", () => {
       await authedRequest(token).send(gql("query { me { id } }"));
 
       const byokInput = {
-        ...validScoutInput,
+        ...validCatalystInput,
         brain: {
           brainType: "BYOK",
           modelId: "claude-sonnet-4-6",
@@ -527,7 +527,7 @@ describe("POST /graphql — createBot mutations", () => {
     const frameRow = await db
       .selectFrom("bot_frames")
       .select("id")
-      .where("name", "=", "SCOUT")
+      .where("name", "=", "CATALYST")
       .executeTakeFirstOrThrow();
 
     const [draftBot] = await db
@@ -547,7 +547,7 @@ describe("POST /graphql — createBot mutations", () => {
     // Now try to create via GraphQL — should return the existing DRAFT
     const res = await authedRequest(token).send(
       gql(CREATE_BOT_MUTATION, {
-        input: { ...validScoutInput, name: "IdempotentBot" },
+        input: { ...validCatalystInput, name: "IdempotentBot" },
       }),
     );
 
@@ -559,17 +559,17 @@ describe("POST /graphql — createBot mutations", () => {
     expect(result.id).toBe(String(draftBot!.id));
   });
 
-  it("happy path: creates BERSERKER bot using frame defaults", async () => {
+  it("happy path: creates SURGE bot using frame defaults", async () => {
     const { token } = await generateTestJwt({
-      sub: "auth0|createbot-berserker-1",
-      email: "createbot-berserker-1@test.com",
+      sub: "auth0|createbot-surge-1",
+      email: "createbot-surge-1@test.com",
     });
     await authedRequest(token).send(gql("query { me { id } }"));
 
-    const berserkerInput = {
-      name: "RageBerserker",
-      frameName: "BERSERKER",
-      avatarSeed: "RageBerserker",
+    const surgeInput = {
+      name: "RageSurge",
+      frameName: "SURGE",
+      avatarSeed: "RageSurge",
       colorway: "#D64545",
       capitalAllocatedUsd: 1500,
       riskAttitude: "AGGRESSIVE",
@@ -601,14 +601,14 @@ describe("POST /graphql — createBot mutations", () => {
     };
 
     const res = await authedRequest(token).send(
-      gql(CREATE_BOT_MUTATION, { input: berserkerInput }),
+      gql(CREATE_BOT_MUTATION, { input: surgeInput }),
     );
     expect(res.status).toBe(200);
     expect(res.body.errors).toBeUndefined();
 
     const bot = res.body.data.createBot;
     expect(bot.status).toBe("ACTIVE");
-    expect(bot.name).toBe("RageBerserker");
+    expect(bot.name).toBe("RageSurge");
     expect(bot.capitalAllocatedUsd).toBe(1500);
   });
 
@@ -623,7 +623,7 @@ describe("POST /graphql — createBot mutations", () => {
 
     const res = await authedRequest(token).send(
       gql(CREATE_BOT_MUTATION, {
-        input: { ...validScoutInput, name: "ZeroBalBot" },
+        input: { ...validCatalystInput, name: "ZeroBalBot" },
       }),
     );
 
@@ -679,7 +679,7 @@ describe("POST /graphql — updateAgentRiskSettings mutations", () => {
 
   async function createTestBot(token: string, name: string): Promise<string> {
     const res = await authedRequest(token).send(
-      gql(CREATE_BOT_MUTATION, { input: { ...validScoutInput, name } }),
+      gql(CREATE_BOT_MUTATION, { input: { ...validCatalystInput, name } }),
     );
     return res.body.data.createBot.id;
   }
