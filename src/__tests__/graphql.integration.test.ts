@@ -633,6 +633,70 @@ describe("POST /graphql — createBot mutations", () => {
   });
 });
 
+// ─── Frame rename regression ──────────────────────────────────────────────────
+// Exercises the runtime string match in createBot: SELECT id FROM bot_frames WHERE name = input.frameName.
+// No compile-time safety net exists across the DB/API boundary — this is the test that catches a divergence.
+
+const RENAMED_FRAMES = [
+  { frameName: "CATALYST", colorway: "#2C6BED" },
+  { frameName: "COMPOUNDER", colorway: "#F2B705" },
+  { frameName: "THRESHOLD", colorway: "#E8F4FF" },
+  { frameName: "SURGE", colorway: "#D64545" },
+  { frameName: "ANCHOR", colorway: "#1C9C61" },
+  { frameName: "PENDULUM", colorway: "#8B7CFF" },
+] as const;
+
+describe("POST /graphql — createBot frame rename regression", () => {
+  afterEach(async () => {
+    const valkey = getValkey();
+    const keys = await valkey.keys("rate:op:*");
+    if (keys.length > 0) await valkey.del(...keys);
+
+    const { getDb } = await import("../lib/db");
+    const db = getDb();
+    await db
+      .deleteFrom("bots")
+      .where(
+        "user_id",
+        "in",
+        db
+          .selectFrom("users")
+          .select("id")
+          .where("email", "like", "%@test.com"),
+      )
+      .execute();
+  });
+
+  it.each(RENAMED_FRAMES)(
+    "createBot succeeds end-to-end for frame $frameName",
+    async ({ frameName, colorway }) => {
+      const sub = `auth0|frame-regression-${frameName.toLowerCase()}`;
+      const { token } = await generateTestJwt({
+        sub,
+        email: `frame-regression-${frameName.toLowerCase()}@test.com`,
+      });
+      await authedRequest(token).send(gql("query { me { id } }"));
+
+      const res = await authedRequest(token).send(
+        gql(CREATE_BOT_MUTATION, {
+          input: {
+            ...validCatalystInput,
+            name: `${frameName}Bot`,
+            frameName,
+            colorway,
+          },
+        }),
+      );
+
+      expect(res.status).toBe(200);
+      expect(res.body.errors).toBeUndefined();
+      const bot = res.body.data.createBot;
+      expect(bot.code).toBeUndefined(); // must not be a ValidationError
+      expect(bot.status).toBe("ACTIVE");
+    },
+  );
+});
+
 // ─── updateAgentRiskSettings mutations ─────────────────────────────────────────
 
 const UPDATE_AGENT_RISK_SETTINGS_MUTATION = `
